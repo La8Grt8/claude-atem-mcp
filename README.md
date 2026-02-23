@@ -402,6 +402,55 @@ The MCP server wraps `atem-connection` methods as MCP tools that Claude (or any 
 - **stdio** (default) — for Claude Desktop, Cursor, and local MCP clients
 - **HTTP** (`TRANSPORT=http`) — Streamable HTTP with OAuth 2.0, for claude.ai, Claude Mobile, and remote access. Uses Express + raw `http.createServer` for proper header handling with the MCP SDK.
 
+### Production Resilience (systemd)
+
+The server is configured to run as a systemd service for maximum reliability:
+
+**Service Configuration** (`~/.config/systemd/user/atem-mcp.service`):
+```ini
+[Unit]
+Description=ATEM MCP Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/guycochran/atem-mcp-server
+Environment="TRANSPORT=http"
+Environment="PORT=3002"
+Environment="BASE_URL=https://atem-mcp.cochran.cloud"
+Environment="ATEM_HOST=192.168.8.237"
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+```
+
+**Resilience Features:**
+- **Auto-starts on boot** — Service enabled with `systemctl --user enable atem-mcp`
+- **Auto-restarts on crash** — `Restart=always` ensures continuous operation
+- **10-second restart delay** — Prevents rapid restart loops
+- **Survives power outages** — Automatically recovers when system boots
+- **Proper shutdown handling** — Gracefully closes ATEM connections
+
+**Service Management:**
+```bash
+# Check status
+systemctl --user status atem-mcp
+
+# Start/stop/restart
+systemctl --user start atem-mcp
+systemctl --user stop atem-mcp
+systemctl --user restart atem-mcp
+
+# View logs
+journalctl --user -u atem-mcp -f
+
+# Enable auto-start on boot
+systemctl --user enable atem-mcp
+```
+
 ## Live Show Usage
 
 When using this server to control an ATEM during a live production, you need every command to execute instantly — no confirmation dialogs, no approval prompts, no delays. The experience varies by client:
