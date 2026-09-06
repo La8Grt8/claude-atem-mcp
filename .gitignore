@@ -4,3 +4,9 @@ dist/
 *.d.ts.map
 .DS_Store
 start.sh
+
+# secrets & runtime — added for backup safety
+.env
+.env.*
+.cloudflared/
+*.log

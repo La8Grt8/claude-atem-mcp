@@ -230,14 +230,17 @@ export function startAutoSwitch(options: {
     return 'Audio level tracking is not active. Cannot auto-switch.';
   }
 
-  const host = options.hostInput ?? 7;
+  const host = options.hostInput ?? 8;
   const mode = options.mode ?? 'program';
-  // In host_ssrc mode, we monitor ALL inputs including the host so we can
-  // detect when the host is speaking vs a guest.
+  // Candidate inputs the auto-switcher may cut to.
+  // - program mode: ALL 8 inputs (host included) — plain active-speaker follow.
+  // - host_ssrc: ALL 8, so we can detect host-vs-guest.
+  // - ssrc_box: exclude the host, since the host lives in its own fixed box
+  //   and the switcher only fills the *guest* box.
   const candidates = options.candidates ?? (
-    mode === 'host_ssrc'
-      ? [1, 2, 3, 4, 5, 6, 7, 8]  // include host in candidates for host_ssrc
-      : [1, 2, 3, 4, 5, 6, 7, 8].filter(i => i !== host)
+    mode === 'ssrc_box'
+      ? [1, 2, 3, 4, 5, 6, 7, 8].filter(i => i !== host)
+      : [1, 2, 3, 4, 5, 6, 7, 8]
   );
   const holdMs = options.holdMs ?? 1000;
   const intervalMs = options.intervalMs ?? 250;

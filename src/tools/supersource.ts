@@ -37,7 +37,7 @@ interface BoxLayout {
   cropRight: number;
 }
 
-const PRESETS: Record<string, { description: string; boxes: BoxLayout[] }> = {
+export const PRESETS: Record<string, { description: string; boxes: BoxLayout[] }> = {
   side_by_side: {
     description: 'Two equal boxes side by side filling the frame (boxes 1-2). Each source is center-cropped to fill its half.',
     boxes: [

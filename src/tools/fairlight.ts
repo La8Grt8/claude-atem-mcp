@@ -104,7 +104,7 @@ interface EQPreset {
   bands: EQPresetBand[];
 }
 
-const EQ_PRESETS: Record<string, EQPreset> = {
+export const EQ_PRESETS: Record<string, EQPreset> = {
   vocal: {
     description: 'Vocal clarity: HP at 80Hz, warm shelf at 200Hz, presence boost at 3kHz, air at 12kHz',
     bands: [
