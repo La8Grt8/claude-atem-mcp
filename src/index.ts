@@ -330,6 +330,54 @@ async function runHTTP(): Promise<void> {
     }
   });
 
+  // Server-Sent Events stream of the same snapshot shape as GET /state/audio-levels,
+  // pushed at ~10Hz so meter ballistics can react to transients between polls.
+  // GET /state/audio-levels above remains as a fallback for clients that can't use SSE.
+  const MAX_SSE_CLIENTS = 20;
+  let sseClientCount = 0;
+  const AUDIO_LEVELS_SSE_TICK_MS = 100;
+
+  app.get('/state/audio-levels/stream', async (req: express.Request, res: express.Response) => {
+    if (sseClientCount >= MAX_SSE_CLIENTS) {
+      res.status(503).json({ error: 'too many concurrent audio-level streams' });
+      return;
+    }
+
+    try {
+      await waitForConnection(5000);
+    } catch (error) {
+      res.status(502).json({ error: String(error) });
+      return;
+    }
+
+    if (!isLevelTrackingActive()) {
+      startAudioLevelTracking().catch((e) => console.error('[atem-mcp] Level tracking start failed:', e));
+    }
+
+    sseClientCount++;
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    });
+    res.flushHeaders();
+
+    const send = () => {
+      res.write(`data: ${JSON.stringify(getAudioLevelsSnapshot())}\n\n`);
+    };
+
+    send(); // send an initial snapshot immediately so the UI doesn't wait a full tick
+    const interval = setInterval(send, AUDIO_LEVELS_SSE_TICK_MS);
+
+    const cleanup = () => {
+      clearInterval(interval);
+      sseClientCount--;
+    };
+    req.on('close', cleanup);
+    res.on('error', cleanup);
+  });
+
   app.post('/state/program', restSwitch((atem, input) => atem.changeProgramInput(input, 0)));
   app.post('/state/preview', restSwitch((atem, input) => atem.changePreviewInput(input, 0)));
   app.post('/state/cut', restSwitch((atem) => atem.cut(0)));

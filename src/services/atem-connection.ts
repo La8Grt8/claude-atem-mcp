@@ -39,12 +39,36 @@ interface InputAudioLevel {
   postFaderLevel: number;
   /** Post-fader peak — for the VU UI */
   postFaderPeak: number;
+  /** Recent post-fader samples (value + timestamp) for a short instantaneous-max window */
+  recentPostFaderSamples: { value: number; t: number }[];
   /** Timestamp of last update */
   lastUpdate: number;
 }
 
 /** Master (post-fader) levels for the MST meter */
-let masterLevels: { level: number; peak: number; lastUpdate: number } | null = null;
+let masterLevels: {
+  level: number;
+  peak: number;
+  /** Recent post-fader samples (value + timestamp) for a short instantaneous-max window */
+  recentSamples: { value: number; t: number }[];
+  lastUpdate: number;
+} | null = null;
+
+/** Length of the short instantaneous-max window, in ms — ensures a poll/stream
+ * tick never misses a transient that occurred between ticks. */
+const WINDOW_MAX_MS = 300;
+
+/** Given a list of {value, t} samples (newest last), prune anything older than
+ * WINDOW_MAX_MS and return the max value remaining (or null if none). */
+function windowMaxOf(samples: { value: number; t: number }[], now: number): number | null {
+  while (samples.length && now - samples[0].t > WINDOW_MAX_MS) {
+    samples.shift();
+  }
+  if (samples.length === 0) return null;
+  let max = -Infinity;
+  for (const s of samples) if (s.value > max) max = s.value;
+  return max;
+}
 
 /** Map of input index → audio level tracking data */
 const audioLevels = new Map<number, InputAudioLevel>();
@@ -73,6 +97,7 @@ export async function startAudioLevelTracking(): Promise<void> {
       const postLevel = Math.max(levels.leftLevel, levels.rightLevel);
       const postPeak = Math.max(levels.leftPeak, levels.rightPeak);
 
+      const now = Date.now();
       const existing = audioLevels.get(inputIndex);
       if (existing) {
         // Add sample to sliding window
@@ -85,7 +110,9 @@ export async function startAudioLevelTracking(): Promise<void> {
         existing.recentPeak = peak;
         existing.postFaderLevel = postLevel;
         existing.postFaderPeak = postPeak;
-        existing.lastUpdate = Date.now();
+        existing.recentPostFaderSamples.push({ value: postLevel, t: now });
+        windowMaxOf(existing.recentPostFaderSamples, now); // prune in place
+        existing.lastUpdate = now;
       } else {
         audioLevels.set(inputIndex, {
           samples: [peak],
@@ -93,15 +120,22 @@ export async function startAudioLevelTracking(): Promise<void> {
           recentPeak: peak,
           postFaderLevel: postLevel,
           postFaderPeak: postPeak,
-          lastUpdate: Date.now(),
+          recentPostFaderSamples: [{ value: postLevel, t: now }],
+          lastUpdate: now,
         });
       }
     } else if (levelData.type === 'master') {
       const levels = levelData.levels;
+      const now = Date.now();
+      const level = Math.max(levels.leftLevel, levels.rightLevel);
+      const recentSamples = masterLevels?.recentSamples ?? [];
+      recentSamples.push({ value: level, t: now });
+      windowMaxOf(recentSamples, now); // prune in place
       masterLevels = {
-        level: Math.max(levels.leftLevel, levels.rightLevel),
+        level,
         peak: Math.max(levels.leftPeak, levels.rightPeak),
-        lastUpdate: Date.now(),
+        recentSamples,
+        lastUpdate: now,
       };
     }
   });
@@ -161,29 +195,38 @@ export function isLevelTrackingActive(): boolean {
  */
 export function getAudioLevelsSnapshot(): {
   active: boolean;
-  inputs: Array<{ input: number; level: number | null; peak: number | null }>;
-  master: { level: number; peak: number } | null;
+  inputs: Array<{ input: number; level: number | null; peak: number | null; windowMax: number | null }>;
+  master: { level: number; peak: number; windowMax: number | null } | null;
 } {
   const now = Date.now();
-  const inputs: Array<{ input: number; level: number | null; peak: number | null }> = [];
+  const inputs: Array<{ input: number; level: number | null; peak: number | null; windowMax: number | null }> = [];
 
   for (let input = 1; input <= 8; input++) {
     const data = audioLevels.get(input);
     const stale = !data || now - data.lastUpdate > LEVEL_WINDOW_MS;
     // Post-fader values so the meters behave like the ATEM's own (fader-responsive);
     // auto-switch keeps using the pre-fader smoothedLevel/recentPeak internally.
+    const wMax = stale ? null : windowMaxOf(data!.recentPostFaderSamples, now);
     inputs.push({
       input,
       level: stale ? null : data!.postFaderLevel / 100,
       peak: stale ? null : data!.postFaderPeak / 100,
+      windowMax: wMax === null ? null : wMax / 100,
     });
   }
 
   const masterStale = !masterLevels || now - masterLevels.lastUpdate > LEVEL_WINDOW_MS;
+  const masterWMax = masterStale ? null : windowMaxOf(masterLevels!.recentSamples, now);
   return {
     active: levelTrackingActive,
     inputs,
-    master: masterStale ? null : { level: masterLevels!.level / 100, peak: masterLevels!.peak / 100 },
+    master: masterStale
+      ? null
+      : {
+          level: masterLevels!.level / 100,
+          peak: masterLevels!.peak / 100,
+          windowMax: masterWMax === null ? null : masterWMax / 100,
+        },
   };
 }
 
