@@ -284,8 +284,23 @@ async function runHTTP(): Promise<void> {
   app.get('/state/switcher', async (_req: express.Request, res: express.Response) => {
     try {
       await waitForConnection(5000);
-      const me = (getAtem().state?.video?.mixEffects?.[0] ?? {}) as { programInput?: number; previewInput?: number };
-      res.json({ connected: isAtemConnected(), program: me.programInput ?? null, preview: me.previewInput ?? null });
+      const state = getAtem().state;
+      const me = (state?.video?.mixEffects?.[0] ?? {}) as {
+        programInput?: number; previewInput?: number;
+        fadeToBlack?: { isFullyBlack: boolean; inTransition: boolean };
+      };
+      const ftb = me.fadeToBlack
+        ? { isFullyBlack: me.fadeToBlack.isFullyBlack, inTransition: me.fadeToBlack.inTransition }
+        : null;
+      const auxSource = state?.video?.auxilliaries?.[0];
+      const aux = typeof auxSource === 'number' ? auxSource : null;
+      res.json({
+        connected: isAtemConnected(),
+        program: me.programInput ?? null,
+        preview: me.previewInput ?? null,
+        ftb,
+        aux,
+      });
     } catch (error) {
       res.status(502).json({ error: String(error) });
     }
@@ -294,6 +309,32 @@ async function runHTTP(): Promise<void> {
   app.post('/state/preview', restSwitch((atem, input) => atem.changePreviewInput(input, 0)));
   app.post('/state/cut', restSwitch((atem) => atem.cut(0)));
   app.post('/state/auto', restSwitch((atem) => atem.autoTransition(0)));
+
+  // Fade to black toggle (no LLM) — no body needed.
+  app.post('/state/ftb', async (_req: express.Request, res: express.Response) => {
+    try {
+      await waitForConnection(5000);
+      const atem = getAtem();
+      await atem.fadeToBlack(0);
+      res.json({ ok: true });
+    } catch (error) {
+      res.status(502).json({ error: String(error) });
+    }
+  });
+
+  // Aux (HDMI output / bus 0) source select (no LLM) — body: { source: number }
+  app.post('/state/aux', async (req: express.Request, res: express.Response) => {
+    try {
+      await waitForConnection(5000);
+      const atem = getAtem();
+      const source = Number(req.body?.source);
+      if (!Number.isFinite(source)) { res.status(400).json({ error: 'source (number) required' }); return; }
+      await atem.setAuxSource(source, 0);
+      res.json({ ok: true, source });
+    } catch (error) {
+      res.status(502).json({ error: String(error) });
+    }
+  });
 
   // Ensure Fairlight audio is ON for inputs 1-8 so the ATEM reports levels
   // (active-speaker detection needs this — OFF inputs report silence).
