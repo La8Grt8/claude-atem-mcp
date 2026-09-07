@@ -131,6 +131,32 @@ export function isLevelTrackingActive(): boolean {
   return levelTrackingActive;
 }
 
+/**
+ * Snapshot of current audio levels for inputs 1-8, for the dashboard's
+ * Fairlight meter UI. Levels are in dB (converted from the ATEM's
+ * hundredths-of-dB units). Stale (no data within LEVEL_WINDOW_MS) or
+ * missing entries report null so the UI can render an empty meter.
+ */
+export function getAudioLevelsSnapshot(): {
+  active: boolean;
+  inputs: Array<{ input: number; level: number | null; peak: number | null }>;
+} {
+  const now = Date.now();
+  const inputs: Array<{ input: number; level: number | null; peak: number | null }> = [];
+
+  for (let input = 1; input <= 8; input++) {
+    const data = audioLevels.get(input);
+    const stale = !data || now - data.lastUpdate > LEVEL_WINDOW_MS;
+    inputs.push({
+      input,
+      level: stale ? null : data!.smoothedLevel / 100,
+      peak: stale ? null : data!.recentPeak / 100,
+    });
+  }
+
+  return { active: levelTrackingActive, inputs };
+}
+
 // ---------------------------------------------------------------------------
 // Auto-switch engine — continuously switches to the active speaker
 // ---------------------------------------------------------------------------

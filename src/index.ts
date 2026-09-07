@@ -7,7 +7,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import express from 'express';
 import http from 'http';
 import crypto from 'crypto';
-import { connectAtem, waitForConnection, getAtem, isAtemConnected, getActiveInputsByAudioLevel, isLevelTrackingActive } from './services/atem-connection.js';
+import { connectAtem, waitForConnection, getAtem, isAtemConnected, getActiveInputsByAudioLevel, isLevelTrackingActive, getAutoSwitchStatus, getAudioLevelsSnapshot, startAudioLevelTracking } from './services/atem-connection.js';
 import { Enums } from 'atem-connection';
 import { registerConnectionTools } from './tools/connection.js';
 import { registerSwitchingTools } from './tools/switching.js';
@@ -305,6 +305,31 @@ async function runHTTP(): Promise<void> {
       res.status(502).json({ error: String(error) });
     }
   });
+  // Auto-switch status (for dashboard sync — server is the source of truth so
+  // the "Manual Control" banner and AUTO SWITCH section self-correct no matter
+  // where auto-switch was started/stopped, e.g. from another tab or voice command).
+  app.get('/state/auto-switch', async (_req: express.Request, res: express.Response) => {
+    try {
+      res.json(getAutoSwitchStatus());
+    } catch (error) {
+      res.status(502).json({ error: String(error) });
+    }
+  });
+
+  // Fairlight audio meter levels for inputs 1-8 (for dashboard meter UI).
+  // Kicks off level tracking if it isn't already active so meters self-start.
+  app.get('/state/audio-levels', async (_req: express.Request, res: express.Response) => {
+    try {
+      await waitForConnection(5000);
+      if (!isLevelTrackingActive()) {
+        startAudioLevelTracking().catch((e) => console.error('[atem-mcp] Level tracking start failed:', e));
+      }
+      res.json(getAudioLevelsSnapshot());
+    } catch (error) {
+      res.status(502).json({ error: String(error) });
+    }
+  });
+
   app.post('/state/program', restSwitch((atem, input) => atem.changeProgramInput(input, 0)));
   app.post('/state/preview', restSwitch((atem, input) => atem.changePreviewInput(input, 0)));
   app.post('/state/cut', restSwitch((atem) => atem.cut(0)));
