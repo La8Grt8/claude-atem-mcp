@@ -35,9 +35,16 @@ interface InputAudioLevel {
   smoothedLevel: number;
   /** Most recent instantaneous peak */
   recentPeak: number;
+  /** Post-fader level (what the ATEM multiview meters show) — for the VU UI */
+  postFaderLevel: number;
+  /** Post-fader peak — for the VU UI */
+  postFaderPeak: number;
   /** Timestamp of last update */
   lastUpdate: number;
 }
+
+/** Master (post-fader) levels for the MST meter */
+let masterLevels: { level: number; peak: number; lastUpdate: number } | null = null;
 
 /** Map of input index → audio level tracking data */
 const audioLevels = new Map<number, InputAudioLevel>();
@@ -59,8 +66,12 @@ export async function startAudioLevelTracking(): Promise<void> {
     if (levelData.type === 'source') {
       const inputIndex = levelData.index;
       const levels = levelData.levels;
-      // Use the maximum of left/right output levels as a proxy for "how loud"
+      // Pre-fader ("output" of the processing chain, before the fader) — used by
+      // auto-switch so speaker detection works even with a fader pulled down.
       const peak = Math.max(levels.outputLeftLevel, levels.outputRightLevel);
+      // Post-fader — what the ATEM's own multiview meters show; used by the VU UI.
+      const postLevel = Math.max(levels.leftLevel, levels.rightLevel);
+      const postPeak = Math.max(levels.leftPeak, levels.rightPeak);
 
       const existing = audioLevels.get(inputIndex);
       if (existing) {
@@ -72,15 +83,26 @@ export async function startAudioLevelTracking(): Promise<void> {
         // Update exponential moving average
         existing.smoothedLevel = EMA_ALPHA * peak + (1 - EMA_ALPHA) * existing.smoothedLevel;
         existing.recentPeak = peak;
+        existing.postFaderLevel = postLevel;
+        existing.postFaderPeak = postPeak;
         existing.lastUpdate = Date.now();
       } else {
         audioLevels.set(inputIndex, {
           samples: [peak],
           smoothedLevel: peak,
           recentPeak: peak,
+          postFaderLevel: postLevel,
+          postFaderPeak: postPeak,
           lastUpdate: Date.now(),
         });
       }
+    } else if (levelData.type === 'master') {
+      const levels = levelData.levels;
+      masterLevels = {
+        level: Math.max(levels.leftLevel, levels.rightLevel),
+        peak: Math.max(levels.leftPeak, levels.rightPeak),
+        lastUpdate: Date.now(),
+      };
     }
   });
 
@@ -140,6 +162,7 @@ export function isLevelTrackingActive(): boolean {
 export function getAudioLevelsSnapshot(): {
   active: boolean;
   inputs: Array<{ input: number; level: number | null; peak: number | null }>;
+  master: { level: number; peak: number } | null;
 } {
   const now = Date.now();
   const inputs: Array<{ input: number; level: number | null; peak: number | null }> = [];
@@ -147,14 +170,21 @@ export function getAudioLevelsSnapshot(): {
   for (let input = 1; input <= 8; input++) {
     const data = audioLevels.get(input);
     const stale = !data || now - data.lastUpdate > LEVEL_WINDOW_MS;
+    // Post-fader values so the meters behave like the ATEM's own (fader-responsive);
+    // auto-switch keeps using the pre-fader smoothedLevel/recentPeak internally.
     inputs.push({
       input,
-      level: stale ? null : data!.smoothedLevel / 100,
-      peak: stale ? null : data!.recentPeak / 100,
+      level: stale ? null : data!.postFaderLevel / 100,
+      peak: stale ? null : data!.postFaderPeak / 100,
     });
   }
 
-  return { active: levelTrackingActive, inputs };
+  const masterStale = !masterLevels || now - masterLevels.lastUpdate > LEVEL_WINDOW_MS;
+  return {
+    active: levelTrackingActive,
+    inputs,
+    master: masterStale ? null : { level: masterLevels!.level / 100, peak: masterLevels!.peak / 100 },
+  };
 }
 
 // ---------------------------------------------------------------------------
