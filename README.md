@@ -1,3 +1,41 @@
+# Claude ATEM MCP
+
+Control a Blackmagic ATEM switcher by talking to Claude, and **log every cut as an EDL for DaVinci Resolve**.
+
+This is [Links Live Media](https://linkslivemedia.com)'s build of Guy Cochran's
+[atem-mcp-server](https://github.com/guycochran/atem-mcp-server). On top of the original 58 tools it adds:
+
+- **EDL logging (CMX 3600)** for switchers without ISO recording, such as the Constellation 4K. Every program
+  cut on an M/E is logged with timecode, whether it comes from the panel, ATEM Software Control, Claude or
+  auto-switch. The `.edl` is rewritten after every cut, and markers export as a Resolve markers EDL.
+  New tools: `atem_edl_start`, `atem_edl_marker`, `atem_edl_status`, `atem_edl_stop`.
+  See [docs/EDL-LOGGING.md](docs/EDL-LOGGING.md).
+- **A 3-page quick manual (PDF)** covering setup, every command, the EDL workflow and troubleshooting:
+  [docs/ATEM-MCP-Quick-Manual.pdf](docs/ATEM-MCP-Quick-Manual.pdf).
+- **A Claude Desktop installer script**: `./add-to-claude-desktop.sh <ATEM_IP>` (quit Claude Desktop first).
+
+## Quick start (macOS)
+
+```bash
+git clone https://github.com/La8Grt8/claude-atem-mcp.git ~/mcp-servers/claude-atem-mcp
+cd ~/mcp-servers/claude-atem-mcp
+npm install --include=dev && npm run build
+./add-to-claude-desktop.sh 192.168.1.240   # your ATEM's IP; quit Claude Desktop first
+```
+
+Then reopen Claude Desktop and say *"Show me the switcher status."*
+
+For EDL logging: *"Start the EDL for Episode 12"*, then *"Mark that"*, then *"Stop the EDL"*. Files go to
+`~/Movies/ATEM EDLs/`. Sync the camera timecode to the switcher first; see the EDL guide.
+
+Test the EDL logger without a switcher: `npm run build && node test-edl-sim.mjs`
+
+---
+
+*Original project documentation follows. MIT License © 2026 Guy Cochran; EDL additions © 2026 Links Live Media, MIT.*
+
+---
+
 # ATEM MCP Server
 
 Control Blackmagic ATEM video switchers with AI assistants using the Model Context Protocol. Works with **Claude Desktop**, **claude.ai**, **Claude Mobile**, **Cursor**, and any MCP-compatible client.
