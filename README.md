@@ -2,6 +2,12 @@
 
 Control a Blackmagic ATEM switcher by talking to Claude, and **log every cut as an EDL for DaVinci Resolve**.
 
+> [!WARNING]
+> **Untested on real hardware.** The EDL logging feature and the Links Live Media additions have not yet been tested with a
+> real ATEM switcher (including the Constellation 4K) or conformed in DaVinci Resolve. They have only been checked against a
+> simulated switcher (`test-edl-sim.mjs`). Don't rely on this for a live show until you've run your own test session.
+> Feedback and bug reports are welcome in [Issues](https://github.com/La8Grt8/claude-atem-mcp/issues).
+
 This is [Links Live Media](https://linkslivemedia.com)'s build of Guy Cochran's
 [atem-mcp-server](https://github.com/guycochran/atem-mcp-server). On top of the original 58 tools it adds:
 

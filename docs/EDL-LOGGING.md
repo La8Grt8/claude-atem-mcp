@@ -1,4 +1,10 @@
-# EDL logging for DaVinci Resolve (local addition — branch `edl-logger`)
+# EDL logging for DaVinci Resolve
+
+> [!WARNING]
+> **Untested on real hardware.** The EDL logging feature and the Links Live Media additions have not yet been tested with a
+> real ATEM switcher (including the Constellation 4K) or conformed in DaVinci Resolve. They have only been checked against a
+> simulated switcher (`test-edl-sim.mjs`). Don't rely on this for a live show until you've run your own test session.
+> Feedback and bug reports are welcome in [Issues](https://github.com/La8Grt8/claude-atem-mcp/issues).
 
 Logs every program switch on an M/E bus and writes a CMX 3600 EDL, for switchers
 without ISO recording (e.g. Constellation 4K). Captures switches from the panel,
