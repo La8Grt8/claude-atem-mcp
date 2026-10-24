@@ -34,21 +34,29 @@ function percentile(values: number[], p: number): number {
 }
 
 export interface NoiseResult {
+  /** Floors for mics that had a signal; mics with none are left out so nothing bogus gets saved. */
   floors: Record<string, number>;
+  silent: string[];
   warnings: string[];
 }
 
 export function measureNoise(frames: Frame[], micIds: string[], names: Record<string, string>): NoiseResult {
   const floors: Record<string, number> = {};
+  const silent: string[] = [];
   const warnings: string[] = [];
   for (const id of micIds) {
     const vals = frames.map(f => f[id] ?? SILENCE_DB);
-    floors[id] = Math.min(ENGINE_CONSTANTS.NOISE_MAX_DB, percentile(vals, 0.2));
-    const spread = percentile(vals, 0.95) - floors[id];
+    const floor = Math.min(ENGINE_CONSTANTS.NOISE_MAX_DB, percentile(vals, 0.2));
+    if (floor <= SILENCE_DB + 1) {
+      silent.push(id);
+      warnings.push(`${names[id]}: no signal at all — check the channel/input mapping.`);
+      continue;
+    }
+    floors[id] = floor;
+    const spread = percentile(vals, 0.95) - floor;
     if (spread > 15) warnings.push(`${names[id]}: level jumped ${spread.toFixed(0)} dB during the quiet test — was someone talking or moving?`);
-    if (floors[id] <= SILENCE_DB + 1) warnings.push(`${names[id]}: no signal at all — check the channel/input mapping.`);
   }
-  return { floors, warnings };
+  return { floors, silent, warnings };
 }
 
 export interface SpeakerResult {

@@ -14,7 +14,7 @@ export const CONFIG_PATH = process.env.SMART_SWITCH_CONFIG
   || path.join(os.homedir(), 'Library', 'Application Support', 'atem-mcp-server', 'smart-switch.json');
 
 function defaults(): SmartSwitchConfig {
-  return { version: 1, activeProfile: 'Default', audioDevice: null, profiles: [newProfile('Default')] };
+  return { version: 1, activeProfile: 'Default', audioDevice: null, atemHost: null, profiles: [newProfile('Default')] };
 }
 
 /** Fill in fields added after a profile was saved, so older files keep loading. */
@@ -36,7 +36,7 @@ export function loadConfig(): SmartSwitchConfig {
     const profiles = (raw.profiles ?? []).map(sanitize);
     if (profiles.length === 0) return defaults();
     const active = profiles.some(p => p.name === raw.activeProfile) ? raw.activeProfile : profiles[0].name;
-    return { version: 1, activeProfile: active, audioDevice: raw.audioDevice ?? null, profiles };
+    return { version: 1, activeProfile: active, audioDevice: raw.audioDevice ?? null, atemHost: raw.atemHost ?? null, profiles };
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
       console.error(`[smart-switch] Could not read ${CONFIG_PATH}, starting from defaults:`, e);

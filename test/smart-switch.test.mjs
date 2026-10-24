@@ -196,3 +196,25 @@ test('calibration: together check loosens an over-estimated bleed', () => {
   assert.ok(r.relaxed.includes('Ana'), JSON.stringify(r));
   assert.ok(p.learned.bleedDb.m1.m2 < -1);
 });
+
+test('group rule: several talking → wide by default, or the tightest shared camera when groupShot = tightest', () => {
+  const script = [[500, {}], [3000, { m1: -16 }], [6000, { m1: -16, m2: -16 }]];
+  const withTwoShot = () => {
+    const p = makeProfile({ learned: true });
+    p.cameras.push({ input: 5, name: 'Rob + Ana', mics: ['m1', 'm2'] });
+    return p;
+  };
+  const wide = run(withTwoShot(), room(script));
+  assert.equal(wide.program, 1, JSON.stringify(wide.cuts));
+
+  const p = withTwoShot();
+  p.rules.groupShot = 'tightest';
+  const tight = run(p, room(script));
+  assert.equal(tight.program, 5, JSON.stringify(tight.cuts));
+
+  const fast = withTwoShot();
+  fast.rules.groupConfirmMs = 0;
+  const quick = run(fast, room(script));
+  const t = quick.cuts.find(c => c.input === 1).t;
+  assert.ok(t - 3500 < 1500, `wide after ${t - 3500} ms of overlap`);
+});

@@ -19,6 +19,12 @@ This is [Links Live Media](https://linkslivemedia.com)'s build of Guy Cochran's
 - **A 3-page quick manual (PDF)** covering setup, every command, the EDL workflow and troubleshooting:
   [docs/ATEM-MCP-Quick-Manual.pdf](docs/ATEM-MCP-Quick-Manual.pdf).
 - **A Claude Desktop installer script**: `./add-to-claude-desktop.sh <ATEM_IP>` (quit Claude Desktop first).
+- **Smart Switch**: bleed-aware automatic switching that cuts to whoever is talking, without being fooled
+  by one voice leaking into the other mics. It reads mics from a USB mixer or the ATEM's Fairlight inputs,
+  calibrates in about a minute, goes to the wide shot when several people talk at once, and pauses after
+  manual cuts. It runs as a **standalone app with its own control panel** (`npm run smart-switch`, or
+  double-click `Smart Switch.command`), no Claude required, or through nine `atem_smart_*` tools.
+  See [docs/SMART_SWITCH.md](docs/SMART_SWITCH.md).
 
 ## Quick start (macOS)
 
@@ -49,6 +55,16 @@ Control Blackmagic ATEM video switchers with AI assistants using the Model Conte
 Talk to your switcher in plain English: *"Put camera 2 on program and dissolve to it"* or *"Start streaming and recording"* or *"Run macro 3."*
 
 Supports both **local** (stdio) and **remote** (Streamable HTTP with OAuth 2.0) transports.
+
+## Smart Switch (standalone app)
+
+```bash
+npm run smart-switch -- --atem 192.168.1.240    # opens http://localhost:3020
+```
+
+The control panel has live mic meters, camera tiles (click them or press 1–9 to cut by hand), an AUTO button
+(⌘↩), a Simulate mode for rehearsals, and tabs for Setup, Rules, Calibrate and a cut log (CSV export). Setup and
+calibration are shared with the `atem_smart_*` MCP tools. Full guide: [docs/SMART_SWITCH.md](docs/SMART_SWITCH.md).
 
 ## How It Works
 
@@ -267,7 +283,7 @@ cloudflared tunnel cleanup atem-mcp  # Remove stale connections
 cloudflared tunnel delete atem-mcp   # Delete the tunnel entirely
 ```
 
-## Available Tools (58 tools)
+## Available Tools (71 tools)
 
 ### Connection
 | Tool | Description |
@@ -368,6 +384,31 @@ Full parametric EQ, compressor, limiter, and gate/expander control for ATEM mode
 | `atem_set_fairlight_makeup_gain` | Set makeup gain on an input |
 | `atem_reset_fairlight_dynamics` | Reset compressor/limiter/gate to factory defaults |
 | `atem_reset_fairlight_eq` | Reset EQ to factory defaults |
+
+### EDL Logging
+
+| Tool | Description |
+|------|-------------|
+| `atem_edl_start` | Start logging program cuts to a CMX 3600 EDL |
+| `atem_edl_marker` | Drop a timeline marker |
+| `atem_edl_status` | Logging status, current timecode, events |
+| `atem_edl_stop` | Finish the EDL and markers file |
+
+### Smart Switch
+
+Bleed-aware active-speaker switching. See [docs/SMART_SWITCH.md](docs/SMART_SWITCH.md).
+
+| Tool | Description |
+|------|-------------|
+| `atem_smart_audio_devices` | List USB mixers / audio interfaces |
+| `atem_smart_setup` | Mics, cameras, speed and cutting rules |
+| `atem_smart_profile` | List / get / use / create / delete show profiles |
+| `atem_smart_calibrate` | Noise, each speaker alone, everyone together, summary |
+| `atem_smart_meters` | Live per-mic levels and voice detection |
+| `atem_smart_switch_on` | Start (optionally simulate) |
+| `atem_smart_switch_off` | Stop |
+| `atem_smart_switch_status` | Target shot and reason, talkers, time on air, recent cuts |
+| `atem_smart_resume` | End the pause after a manual cut |
 
 ## Common Input IDs
 

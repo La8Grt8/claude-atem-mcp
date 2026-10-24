@@ -42,8 +42,8 @@ export const ENGINE_CONSTANTS = {
   BLEED_CAP_DB: -1,
   /** Several talkers: one of them leading the others by this much counts as the speaker. */
   DOMINANCE_DB: 8,
-  /** Minimum pause in the speaker's voice before a variety cutaway may land. */
-  VARIETY_PAUSE_MS: 250,
+  /** Minimum pause in the speaker's raw level (not the smoothed envelope) before a variety cutaway may land. */
+  VARIETY_PAUSE_MS: 200,
 };
 
 export interface MicStatus {
@@ -81,6 +81,8 @@ interface MicRuntime {
   talking: boolean;
   talkStart: number;
   lastVoiceAt: number;
+  /** Last tick the raw level (not the envelope) was above threshold — used to find natural pauses. */
+  lastRawVoiceAt: number;
   expected: number | null;
   threshold: number;
 }
@@ -183,6 +185,7 @@ export class SwitchEngine {
       }
       r.floor = Math.min(r.floor, this.k.NOISE_MAX_DB);
       r.threshold = m.manualThresholdDb ?? (r.floor + rules.autoMarginDb);
+      if (x > r.threshold) r.lastRawVoiceAt = now;
     }
 
     // 3. own voice vs expected bleed
@@ -263,7 +266,9 @@ export class SwitchEngine {
         }
       }
     } else if (this.groupSince !== null && now - this.groupSince >= rules.groupConfirmMs) {
-      const cam = this.tightest(cams, talkers.map(t => t.id)) ?? this.wide(cams);
+      const cam = this.profile.rules.groupShot === 'wide'
+        ? this.wide(cams)
+        : (this.tightest(cams, talkers.map(t => t.id)) ?? this.wide(cams));
       target = cam?.input ?? null;
       reason = `${talkers.length} talking: ${names.join(', ')}`;
     } else {
@@ -289,7 +294,7 @@ export class SwitchEngine {
       } else if (rules.varietyMs > 0 && wide && target !== null && target !== wide.input
         && this.program === target && now - r.talkStart >= rules.varietyMs
         && now - this.lastCutAt >= rules.varietyMs
-        && !r.ownVoice && now - r.lastVoiceAt >= this.k.VARIETY_PAUSE_MS) {
+        && now - r.lastRawVoiceAt >= this.k.VARIETY_PAUSE_MS) {
         this.varietyUntil = now + Math.max(rules.varietyHoldMs, rules.minShotMs);
         target = wide.input;
         reason = `Variety: ${speaker.name} has been on for ${Math.round((now - r.talkStart) / 1000)} s`;
@@ -343,6 +348,7 @@ export class SwitchEngine {
       r = {
         env: x, envHoldUntil: 0, floor: this.profile.learned.noiseFloorDb[m.id] ?? null, level: x,
         ownVoice: false, aboveMs: 0, belowMs: 0, talking: false, talkStart: 0, lastVoiceAt: -Infinity,
+        lastRawVoiceAt: -Infinity,
         expected: null, threshold: 0,
       };
       this.mic.set(m.id, r);

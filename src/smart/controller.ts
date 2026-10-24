@@ -216,6 +216,19 @@ class SmartSwitchController {
     this.engine.releaseHold();
   }
 
+  /**
+   * Cut by hand (the app's camera buttons / number keys). The engine sees it as
+   * a manual cut and pauses. In simulation only the simulated program changes.
+   */
+  async manualCut(input: number): Promise<void> {
+    if (this.switching && this.simulate) { this.simProgram = input; return; }
+    if (!isAtemConnected()) throw new Error('Not connected to ATEM.');
+    const { me, transition } = this.profile().rules;
+    const atem = getAtem();
+    if (transition === 'auto') { await atem.changePreviewInput(input, me); await atem.autoTransition(me); }
+    else await atem.changeProgramInput(input, me);
+  }
+
   status() {
     const now = Date.now();
     const p = this.profile();
@@ -230,6 +243,7 @@ class SmartSwitchController {
       speed: p.speed,
       runningForSeconds: this.switching ? Math.round((now - this.startedAt) / 1000) : 0,
       program: this.program() === null ? null : this.label(this.program()!),
+      programInput: this.program(),
       decision: this.lastDecision,
       manualPauseRemainingS: Math.ceil(this.engine.holdRemainingMs(now) / 1000),
       mics: this.engine.status().map(s => ({

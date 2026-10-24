@@ -43,8 +43,10 @@ export interface Rules {
 
   /** From how many simultaneous talkers we go to a camera that shows them all. */
   groupCount: number;
-  /** How long they must talk together first. */
+  /** How long they must talk together first (0 = as soon as they overlap). */
   groupConfirmMs: number;
+  /** Where several people talking at once go: always the wide shot, or the tightest camera that shows all of them. */
+  groupShot: 'wide' | 'tightest';
 
   silenceAction: SilenceAction;
   silenceCamera: number | null;     // ATEM input, used when silenceAction = 'camera'
@@ -96,6 +98,8 @@ export interface SmartSwitchConfig {
   activeProfile: string;
   /** ffmpeg avfoundation audio device (name or index) for 'device' mics. */
   audioDevice: string | null;
+  /** ATEM address the standalone app connects to. */
+  atemHost: string | null;
   profiles: Profile[];
 }
 
@@ -114,6 +118,7 @@ export const DEFAULT_RULES: Rules = {
   ...SPEED_PRESETS.normal,
   groupCount: 2,
   groupConfirmMs: 2500,
+  groupShot: 'wide',
   silenceAction: 'stay',
   silenceCamera: null,
   silenceMs: 4000,
