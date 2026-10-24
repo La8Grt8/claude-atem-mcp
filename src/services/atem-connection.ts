@@ -79,6 +79,16 @@ let levelTrackingActive = false;
 /** EMA smoothing factor — 0.3 gives good responsiveness while smoothing bursts */
 const EMA_ALPHA = 0.3;
 
+/** Raw per-input pre-fader level listeners (hundredths of dB), e.g. the smart switch. */
+type SourceLevelListener = (input: number, level: number) => void;
+const sourceLevelListeners = new Set<SourceLevelListener>();
+
+/** Subscribe to every raw pre-fader input level the ATEM sends. Returns an unsubscribe function. */
+export function onSourceLevel(listener: SourceLevelListener): () => void {
+  sourceLevelListeners.add(listener);
+  return () => { sourceLevelListeners.delete(listener); };
+}
+
 /**
  * Start listening for audio level events from the ATEM.
  * Must be called after connecting. Safe to call multiple times.
@@ -96,6 +106,7 @@ export async function startAudioLevelTracking(): Promise<void> {
       // Post-fader — what the ATEM's own multiview meters show; used by the VU UI.
       const postLevel = Math.max(levels.leftLevel, levels.rightLevel);
       const postPeak = Math.max(levels.leftPeak, levels.rightPeak);
+      for (const l of sourceLevelListeners) l(inputIndex, peak);
 
       const now = Date.now();
       const existing = audioLevels.get(inputIndex);
@@ -319,6 +330,10 @@ export function startAutoSwitch(options: {
 }): string {
   if (autoSwitch) {
     return 'Auto-switch is already running. Stop it first with atem_auto_switch_off.';
+  }
+
+  if (otherSwitcherRunning()) {
+    return 'The smart switch is running. Stop it first with atem_smart_switch_off.';
   }
 
   if (!atemInstance || !isConnected) {
@@ -605,6 +620,18 @@ export async function activatePendingLookUSKs(me: number = 0): Promise<number[]>
     }
   }
   return usks;
+}
+
+let otherSwitcherRunning: () => boolean = () => false;
+
+/** Register a check for another switcher (the smart switch) so the two never run at once. */
+export function setOtherSwitcherCheck(check: () => boolean): void {
+  otherSwitcherRunning = check;
+}
+
+/** Whether the legacy loudest-input auto-switch is running (the smart switch refuses to run alongside it). */
+export function isAutoSwitchRunning(): boolean {
+  return autoSwitch !== null;
 }
 
 export function getAtem(): Atem {
