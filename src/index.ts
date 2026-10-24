@@ -19,6 +19,7 @@ import { registerSuperSourceTools, PRESETS } from './tools/supersource.js';
 import { registerFairlightTools, EQ_PRESETS } from './tools/fairlight.js';
 import { registerEdlTools } from './tools/edl.js';
 import { registerSmartSwitchTools } from './tools/smart-switch.js';
+import { registerTentacleTools } from './tools/tentacle.js';
 import { tokenManager } from './auth/token-manager.js';
 
 const toolMode: 'basic' | 'full' = process.env.TOOLS === 'basic' ? 'basic' : 'full';
@@ -34,6 +35,7 @@ function createServer(): McpServer {
   registerSuperSourceTools(server, toolMode);// basic: 7, full: 14
   registerEdlTools(server);                 // 4 tools (EDL logging for Resolve)
   registerSmartSwitchTools(server);         // 9 tools (bleed-aware smart switch)
+  registerTentacleTools(server);            // 2 tools (jam Tentacle Sync to ATEM timecode)
 
   // Full-only tool groups
   if (toolMode === 'full') {

@@ -25,6 +25,10 @@ This is [Links Live Media](https://linkslivemedia.com)'s build of Guy Cochran's
   manual cuts. It runs as a **standalone app with its own control panel** (`npm run smart-switch`, or
   double-click `Smart Switch.command`), no Claude required, or through nine `atem_smart_*` tools.
   See [docs/SMART_SWITCH.md](docs/SMART_SWITCH.md).
+- **Tentacle Sync jam to switcher timecode**: plug Tentacle Sync timecode generators into the Mac by USB and
+  say *"jam the Tentacles"*. They get the ATEM's timecode and frame rate, landed on a frame boundary and
+  verified by read-back, so camera files line up with the EDL. New tools: `atem_tentacle_jam`,
+  `atem_tentacle_status`. See [docs/TENTACLE-JAM.md](docs/TENTACLE-JAM.md).
 
 ## Quick start (macOS)
 
@@ -393,6 +397,15 @@ Full parametric EQ, compressor, limiter, and gate/expander control for ATEM mode
 | `atem_edl_marker` | Drop a timeline marker |
 | `atem_edl_status` | Logging status, current timecode, events |
 | `atem_edl_stop` | Finish the EDL and markers file |
+
+### Tentacle Sync
+
+Jam USB-connected Tentacle Sync units to the switcher's timecode. See [docs/TENTACLE-JAM.md](docs/TENTACLE-JAM.md).
+
+| Tool | Description |
+|------|-------------|
+| `atem_tentacle_jam` | Set every connected Tentacle to the ATEM timecode and frame rate, then verify |
+| `atem_tentacle_status` | Each Tentacle's timecode, frame rate and drift against the switcher |
 
 ### Smart Switch
 

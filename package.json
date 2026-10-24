@@ -32,6 +32,7 @@
     "atem-connection": "^3.8.0",
     "express": "^4.21.0",
     "jsonwebtoken": "^9.0.3",
+    "usb": "^2.19.1",
     "zod": "^3.24.0"
   },
   "devDependencies": {
