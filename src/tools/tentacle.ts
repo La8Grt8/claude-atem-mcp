@@ -46,7 +46,7 @@ Args:
         setFrameRate: set_frame_rate, offsetFrames: offset_frames, autoCorrect: auto_correct,
       });
       return text([
-        `Switcher: ${r.atemTimecode} @ ${r.atemRate} → Tentacle rate ${r.tentacleRate}`,
+        `Switcher: ${r.sourceTimecode} @ ${r.sourceRate} → Tentacle rate ${r.tentacleRate}`,
         ...r.reports.map(describe),
       ].join('\n'));
     }
@@ -66,7 +66,7 @@ Makes no changes. Quit the Tentacle Setup app first.`,
       const r = await checkTentacles(isAtemConnected() ? getAtem() as unknown as AtemLike : null);
       if (!r.reports.length) return text('No Tentacle Sync found on USB. Connect it with a USB cable and switch it on.');
       return text([
-        r.atemTimecode ? `Switcher: ${r.atemTimecode}` : 'Switcher timecode unavailable (not connected or not reported).',
+        r.sourceTimecode ? `Switcher: ${r.sourceTimecode}` : 'Switcher timecode unavailable (not connected or not reported).',
         ...r.reports.map(describe),
       ].join('\n'));
     }

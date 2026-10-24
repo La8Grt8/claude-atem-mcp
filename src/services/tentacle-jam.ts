@@ -1,5 +1,6 @@
 // ---------------------------------------------------------------------------
-// Tentacle jam — sets every USB-connected Tentacle Sync to the ATEM's timecode.
+// Tentacle jam — sets every USB-connected Tentacle Sync to the ATEM's timecode
+// (or the Mac's time of day, to match an EDL logged from the Mac clock).
 //
 // The ATEM reports its timecode on request ('TiRq' → 'Time'). We anchor that to
 // the Mac's monotonic clock, wait for the next frame boundary, and send the
@@ -90,7 +91,31 @@ export async function readAtemTime(atem: AtemLike, timeoutMs = 1500):
   return { anchor: { frames: tcToFrames(t.hour, t.minute, t.second, t.frame, fr.base, dropFrame), ms }, fr, dropFrame };
 }
 
+/**
+ * Mac time of day as timecode, counted exactly as the EDL logger's "clock" source
+ * does, so Tentacles jammed this way match an EDL logged with tc_source "clock".
+ */
+export function readClockTime(atem: AtemLike | null):
+  { anchor: AtemAnchor; fr: FrameRate; dropFrame: boolean } {
+  const fr = frameRateFromVideoMode(atem?.state?.settings?.videoMode);
+  const dropFrame = fr.real % 1 !== 0 && (fr.base === 30 || fr.base === 60);
+  const d = new Date();
+  const ms = performance.now();
+  const secs = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds() + d.getMilliseconds() / 1000;
+  return { anchor: { frames: secs * fr.real, ms }, fr, dropFrame };
+}
+
+export type JamSource = 'atem' | 'clock';
+
+export async function readSourceTime(atem: AtemLike | null, source: JamSource) {
+  if (source === 'clock') return readClockTime(atem);
+  if (!atem) throw new Error('Not connected to the switcher.');
+  return readAtemTime(atem);
+}
+
 export interface JamOptions {
+  /** Timecode to jam: the switcher's (default) or the Mac's time of day. */
+  source?: JamSource;
   /** Also set each Tentacle's frame rate to match the switcher (default true). */
   setFrameRate?: boolean;
   /** Frames added to the jammed timecode, to compensate a known device offset. */
@@ -130,8 +155,8 @@ async function measureOffset(t: TentacleDevice, anchor: AtemAnchor, fr: FrameRat
   return { offset: Math.round(deltas[1]), tc };
 }
 
-async function jamOnce(devices: TentacleDevice[], atem: AtemLike, offsetFrames: number) {
-  const { anchor, fr, dropFrame } = await readAtemTime(atem);
+async function jamOnce(devices: TentacleDevice[], atem: AtemLike | null, source: JamSource, offsetFrames: number) {
+  const { anchor, fr, dropFrame } = await readSourceTime(atem, source);
   const plan = tentacleRateFor(fr, dropFrame);
   // One-way USB latency ≈ half a round trip, measured on the first device.
   const t0 = performance.now();
@@ -143,13 +168,14 @@ async function jamOnce(devices: TentacleDevice[], atem: AtemLike, offsetFrames: 
   return { anchor, fr, plan, target, results };
 }
 
-export async function jamTentacles(atem: AtemLike, opts: JamOptions = {}): Promise<{
-  atemTimecode: string; atemRate: string; tentacleRate: string; reports: DeviceReport[];
+export async function jamTentacles(atem: AtemLike | null, opts: JamOptions = {}): Promise<{
+  source: JamSource; sourceTimecode: string; sourceRate: string; tentacleRate: string; reports: DeviceReport[];
 }> {
+  const source = opts.source ?? 'atem';
   const devices = await openTentacles();
   if (!devices.length) throw new Error('No Tentacle Sync found on USB. Connect it with a USB cable and switch it on.');
   try {
-    const first = await readAtemTime(atem);
+    const first = await readSourceTime(atem, source);
     const plan = tentacleRateFor(first.fr, first.dropFrame);
     const reports: DeviceReport[] = devices.map(d => ({ device: d.id, frameRate: '' }));
 
@@ -167,7 +193,7 @@ export async function jamTentacles(atem: AtemLike, opts: JamOptions = {}): Promi
 
     let offset = opts.offsetFrames ?? 0;
     for (let attempt = 0; attempt < 2; attempt++) {
-      const jam = await jamOnce(live, atem, offset);
+      const jam = await jamOnce(live, atem, source, offset);
       let worst = 0;
       for (const [j, d] of live.entries()) {
         const r = reports[devices.indexOf(d)];
@@ -186,8 +212,9 @@ export async function jamTentacles(atem: AtemLike, opts: JamOptions = {}): Promi
     const now = performance.now();
     const atemFrames = first.anchor.frames + ((now - first.anchor.ms) / 1000) * first.fr.real;
     return {
-      atemTimecode: framesToTc(atemFrames, first.fr.base, first.dropFrame),
-      atemRate: `${first.fr.label}${first.dropFrame ? ' DF' : ''}`,
+      source,
+      sourceTimecode: framesToTc(atemFrames, first.fr.base, first.dropFrame),
+      sourceRate: `${first.fr.label}${first.dropFrame ? ' DF' : ''}`,
       tentacleRate: formatRate(plan.rate),
       reports,
     };
@@ -196,13 +223,13 @@ export async function jamTentacles(atem: AtemLike, opts: JamOptions = {}): Promi
   }
 }
 
-/** Read each Tentacle's timecode and compare it with the switcher's (no changes made). */
-export async function checkTentacles(atem: AtemLike | null): Promise<{
-  atemTimecode?: string; reports: DeviceReport[];
+/** Read each Tentacle's timecode and compare it with the source's (no changes made). */
+export async function checkTentacles(atem: AtemLike | null, source: JamSource = 'atem'): Promise<{
+  sourceTimecode?: string; reports: DeviceReport[];
 }> {
   const devices = await openTentacles();
   try {
-    const atemTime = atem ? await readAtemTime(atem).catch(() => null) : null;
+    const atemTime = await readSourceTime(atem, source).catch(() => null);
     const reports: DeviceReport[] = [];
     for (const d of devices) {
       try {
@@ -221,11 +248,11 @@ export async function checkTentacles(atem: AtemLike | null): Promise<{
         reports.push({ device: d.id, frameRate: '', error: (err as Error).message });
       }
     }
-    const atemTimecode = atemTime
+    const sourceTimecode = atemTime
       ? framesToTc(atemTime.anchor.frames + ((performance.now() - atemTime.anchor.ms) / 1000) * atemTime.fr.real,
         atemTime.fr.base, atemTime.dropFrame)
       : undefined;
-    return { atemTimecode, reports };
+    return { sourceTimecode, reports };
   } finally {
     devices.forEach(d => d.close());
   }

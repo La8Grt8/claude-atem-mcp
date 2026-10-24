@@ -7,7 +7,7 @@ import {
   buildPacket, parseReply, timecodePayload, framerateFromPayload, formatRate, CMD, TENTACLE_PIDS,
 } from '../dist/services/tentacle-usb.js';
 import {
-  tentacleRateFor, planJam, tentacleFramesAt, msForTentacleFrame, readAtemTime,
+  tentacleRateFor, planJam, tentacleFramesAt, msForTentacleFrame, readAtemTime, readClockTime, readSourceTime,
 } from '../dist/services/tentacle-jam.js';
 import { tcToFrames } from '../dist/services/edl-logger.js';
 
@@ -100,4 +100,19 @@ test('readAtemTime fails clearly when the switcher stays silent', async () => {
   atem.state = {};
   atem.requestTime = async () => {};
   await assert.rejects(readAtemTime(atem, 50), /did not report its timecode/);
+});
+
+test('clock source counts time of day like the EDL logger', () => {
+  const atem = new EventEmitter();
+  atem.state = { settings: { videoMode: undefined } };          // unknown mode → 29.97 DF
+  const d = new Date();
+  const c = readClockTime(atem);
+  const secs = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds() + d.getMilliseconds() / 1000;
+  assert.equal(c.dropFrame, true);
+  assert.ok(Math.abs(c.anchor.frames - secs * c.fr.real) < c.fr.real); // within a second of the same count
+});
+
+test('switcher source needs a switcher; clock source does not', async () => {
+  await assert.rejects(readSourceTime(null, 'atem'), /Not connected/);
+  assert.ok((await readSourceTime(null, 'clock')).anchor.frames >= 0);
 });

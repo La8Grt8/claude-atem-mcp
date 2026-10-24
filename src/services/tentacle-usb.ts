@@ -194,11 +194,20 @@ export class TentacleDevice {
   }
 }
 
-/** Open every connected Tentacle. Caller must close() each one. */
-export async function openTentacles(): Promise<TentacleDevice[]> {
+async function findTentacles(): Promise<UsbDevice[]> {
   const usb = await loadUsb();
   const list: UsbDevice[] = (usb.getDeviceList ?? usb.usb.getDeviceList)();
-  const found = list.filter(d => d.deviceDescriptor.idVendor === TENTACLE_VID && TENTACLE_PIDS.includes(d.deviceDescriptor.idProduct));
+  return list.filter(d => d.deviceDescriptor.idVendor === TENTACLE_VID && TENTACLE_PIDS.includes(d.deviceDescriptor.idProduct));
+}
+
+/** Tentacles currently plugged in, without opening them (cheap enough to poll). */
+export async function listTentacles(): Promise<{ key: string; pid: number }[]> {
+  return (await findTentacles()).map(d => ({ key: `usb-${d.busNumber}-${d.deviceAddress}`, pid: d.deviceDescriptor.idProduct }));
+}
+
+/** Open every connected Tentacle. Caller must close() each one. */
+export async function openTentacles(): Promise<TentacleDevice[]> {
+  const found = await findTentacles();
   const opened: TentacleDevice[] = [];
   const errors: string[] = [];
   for (const d of found) {
