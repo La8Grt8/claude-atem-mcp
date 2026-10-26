@@ -91,6 +91,8 @@ interface UsbDevice {
   deviceAddress: number;
   open(): void;
   close(): void;
+  configDescriptor?: unknown;
+  setConfiguration(value: number, cb: (err?: any) => void): void;
   interface(n: number): any;
   getStringDescriptor(index: number, cb: (err: any, value?: string) => void): void;
 }
@@ -118,11 +120,23 @@ export class TentacleDevice {
   get pid(): number { return this.dev.deviceDescriptor.idProduct; }
   get id(): string { return this.serial || `usb-${this.dev.busNumber}-${this.dev.deviceAddress}`; }
 
-  open(): void {
+  async open(): Promise<void> {
     // Same PID→interface map as tentacle_tools_pid_interface_mapping.
     const ifaceNum = this.pid >= 0x0d40 ? 1 : 0;
     this.dev.open();
-    const iface = this.dev.interface(ifaceNum);
+    // macOS leaves vendor-class devices unconfigured until a driver selects a configuration
+    // (libusb in Tentacle Setup does this implicitly); without it there are no interfaces.
+    if (!this.dev.configDescriptor) {
+      await new Promise<void>((res, rej) => this.dev.setConfiguration(1, e => e ? rej(e) : res()))
+        .catch(err => { this.dev.close(); throw new Error(`Cannot configure Tentacle USB device (${(err as Error).message}).`); });
+    }
+    let iface: any;
+    try {
+      iface = this.dev.interface(ifaceNum);
+    } catch (err) {
+      this.dev.close();
+      throw new Error(`Tentacle USB interface ${ifaceNum} not found (${(err as Error).message}) — unsupported model or firmware.`);
+    }
     try {
       if (iface.isKernelDriverActive?.()) iface.detachKernelDriver();
     } catch { /* not permitted on macOS without entitlements; claim may still work */ }
@@ -136,7 +150,7 @@ export class TentacleDevice {
     this.epOut = iface.endpoint(EP_OUT);
     this.epIn = iface.endpoint(EP_IN);
     if (!this.epOut || !this.epIn) {
-      this.close();
+      await this.close();
       throw new Error('Tentacle USB endpoints 0x02/0x81 not found — unsupported model or firmware.');
     }
     this.epOut.timeout = TIMEOUT_MS;
@@ -150,10 +164,13 @@ export class TentacleDevice {
       this.dev.getStringDescriptor(idx, (err, v) => resolve(err ? '' : (v ?? ''))));
   }
 
-  close(): void {
-    try { this.iface?.release(true, () => { try { this.dev.close(); } catch { /* already closed */ } }); }
-    catch { try { this.dev.close(); } catch { /* already closed */ } }
+  /** Release the interface and close the device. node-usb reuses one Device object per
+   *  physical device, so the next open must wait until this has finished. */
+  async close(): Promise<void> {
+    const iface = this.iface;
     this.iface = this.epOut = this.epIn = null;
+    if (iface) await new Promise<void>(res => { try { iface.release(true, () => res()); } catch { res(); } });
+    try { this.dev.close(); } catch { /* already closed */ }
   }
 
   /** Send one command and return the reply payload. Commands are serialized per device. */
@@ -205,7 +222,7 @@ export async function listTentacles(): Promise<{ key: string; pid: number }[]> {
   return (await findTentacles()).map(d => ({ key: `usb-${d.busNumber}-${d.deviceAddress}`, pid: d.deviceDescriptor.idProduct }));
 }
 
-/** Open every connected Tentacle. Caller must close() each one. */
+/** Open every connected Tentacle. Caller must await close() on each one. */
 export async function openTentacles(): Promise<TentacleDevice[]> {
   const found = await findTentacles();
   const opened: TentacleDevice[] = [];
@@ -213,7 +230,7 @@ export async function openTentacles(): Promise<TentacleDevice[]> {
   for (const d of found) {
     const t = new TentacleDevice(d);
     try {
-      t.open();
+      await t.open();
       await t.readSerial();
       opened.push(t);
     } catch (err) {

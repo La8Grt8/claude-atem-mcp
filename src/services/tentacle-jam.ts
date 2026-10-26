@@ -74,21 +74,49 @@ async function waitUntil(ms: number): Promise<void> {
   while (performance.now() < ms) { /* spin the last few ms for frame accuracy */ }
 }
 
-/** Ask the switcher for its timecode and anchor it to performance.now(). */
-export async function readAtemTime(atem: AtemLike, timeoutMs = 1500):
+/**
+ * Ask the switcher for its timecode and anchor it to performance.now().
+ *
+ * The switcher answers on its own frame clock, and a reply can arrive several frames
+ * after the time it reports (seen on a Constellation 4K: 0–5 frames, varying per reply).
+ * A late reply always reads behind, never ahead, so we ask several times and anchor on
+ * the reply that reads furthest ahead of the Mac clock: the least delayed one.
+ */
+export async function readAtemTime(atem: AtemLike, timeoutMs = 1500, samples = 12):
   Promise<{ anchor: AtemAnchor; fr: FrameRate; dropFrame: boolean }> {
   const fr = frameRateFromVideoMode(atem.state?.settings?.videoMode);
   let dropFrame = fr.real % 1 !== 0 && (fr.base === 30 || fr.base === 60);
-  const t = await new Promise<any>((resolve, reject) => {
-    const timer = setTimeout(() => { atem.off('updatedTime', onTime); reject(new Error(
-      'The switcher did not report its timecode (needs ATEM firmware 8.0 or later).')); }, timeoutMs);
-    const onTime = (time: any) => { clearTimeout(timer); atem.off('updatedTime', onTime); resolve(time); };
-    atem.on('updatedTime', onTime);
-    atem.requestTime().catch(err => { clearTimeout(timer); atem.off('updatedTime', onTime); reject(err); });
-  });
-  const ms = performance.now();
-  if (typeof t.dropFrame === 'boolean') dropFrame = t.dropFrame;
-  return { anchor: { frames: tcToFrames(t.hour, t.minute, t.second, t.frame, fr.base, dropFrame), ms }, fr, dropFrame };
+  const replies: { t: any; ms: number }[] = [];
+  let requestError: unknown = null;
+  const onTime = (t: any) => { replies.push({ t, ms: performance.now() }); };
+  atem.on('updatedTime', onTime);
+  try {
+    const start = performance.now();
+    for (let i = 0; i < samples && performance.now() - start < timeoutMs; i++) {
+      atem.requestTime().catch(err => { requestError ??= err; });
+      await new Promise(r => setTimeout(r, 40));
+    }
+    while (replies.length < samples && performance.now() - start < timeoutMs) await new Promise(r => setTimeout(r, 10));
+  } finally {
+    atem.off('updatedTime', onTime);
+  }
+  if (!replies.length) {
+    throw requestError instanceof Error ? requestError
+      : new Error('The switcher did not report its timecode (needs ATEM firmware 8.0 or later).');
+  }
+  const last = replies[replies.length - 1].t;
+  if (typeof last.dropFrame === 'boolean') dropFrame = last.dropFrame;
+  const day = tcToFrames(24, 0, 0, 0, fr.base, dropFrame);
+  const first = replies[0];
+  let best: AtemAnchor | null = null, bestLead = -Infinity;
+  for (const { t, ms } of replies) {
+    let frames = tcToFrames(t.hour, t.minute, t.second, t.frame, fr.base, dropFrame);
+    const firstFrames = tcToFrames(first.t.hour, first.t.minute, first.t.second, first.t.frame, fr.base, dropFrame);
+    if (frames - firstFrames < -day / 2) frames += day; // crossed midnight during the burst
+    const lead = frames - (ms / 1000) * fr.real;
+    if (lead > bestLead) { bestLead = lead; best = { frames, ms }; }
+  }
+  return { anchor: best!, fr, dropFrame };
 }
 
 /**
@@ -152,7 +180,9 @@ async function measureOffset(t: TentacleDevice, anchor: AtemAnchor, fr: FrameRat
     deltas.push(d);
   }
   deltas.sort((a, b) => a - b);
-  return { offset: Math.round(deltas[1]), tc };
+  // The device reports whole frames, so an exactly synced Tentacle reads 0 to 1 frame behind
+  // the continuous switcher estimate; centre that window on zero before rounding.
+  return { offset: Math.round(deltas[1] + 0.5), tc };
 }
 
 async function jamOnce(devices: TentacleDevice[], atem: AtemLike | null, source: JamSource, offsetFrames: number) {
@@ -219,7 +249,7 @@ export async function jamTentacles(atem: AtemLike | null, opts: JamOptions = {})
       reports,
     };
   } finally {
-    devices.forEach(d => d.close());
+    await Promise.all(devices.map(d => d.close()));
   }
 }
 
@@ -254,6 +284,6 @@ export async function checkTentacles(atem: AtemLike | null, source: JamSource = 
       : undefined;
     return { sourceTimecode, reports };
   } finally {
-    devices.forEach(d => d.close());
+    await Promise.all(devices.map(d => d.close()));
   }
 }

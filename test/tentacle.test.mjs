@@ -116,3 +116,27 @@ test('switcher source needs a switcher; clock source does not', async () => {
   await assert.rejects(readSourceTime(null, 'atem'), /Not connected/);
   assert.ok((await readSourceTime(null, 'clock')).anchor.frames >= 0);
 });
+
+test('video mode 30 (newer than atem-connection) runs 30 fps non-drop', async () => {
+  const { frameRateFromVideoMode } = await import('../dist/services/edl-logger.js');
+  assert.deepEqual(frameRateFromVideoMode(30), { base: 30, real: 30, label: '30' });
+  assert.deepEqual(tentacleRateFor(frameRateFromVideoMode(30), false).rate, { fps: 30, ntsc: false, dropFrame: false });
+});
+
+test('readAtemTime anchors on the least-delayed reply in a burst', async () => {
+  const atem = new EventEmitter();
+  atem.state = { settings: { videoMode: 30 } };              // 30 fps NDF
+  const t0 = performance.now();
+  const delays = [3, 0, 5, 1, 2];                              // frames each reply is late
+  let i = 0;
+  atem.requestTime = async () => {
+    const lateBy = delays[i++ % delays.length];
+    const sentMs = performance.now() - t0;
+    const trueFrames = Math.floor(sentMs / 1000 * 30) + 30 * 3600;   // switcher clock: 01:00:00:00 at t0
+    const f = trueFrames - lateBy;
+    setTimeout(() => atem.emit('updatedTime', { hour: Math.floor(f / 108000), minute: Math.floor(f / 1800) % 60, second: Math.floor(f / 30) % 60, frame: f % 30, dropFrame: false }), 2);
+  };
+  const t = await readAtemTime(atem, 1500, 5);
+  const truth = 30 * 3600 + ((t.anchor.ms - t0) / 1000) * 30;
+  assert.ok(Math.abs(t.anchor.frames - truth) < 1.2, `anchor off by ${(t.anchor.frames - truth).toFixed(2)} frames`);
+});
