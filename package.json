@@ -9,7 +9,9 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "start:http": "TRANSPORT=http node dist/index.js",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "test": "tsc && node --test test/*.test.mjs",
+    "smart-switch": "node dist/app/smart-switch-app.js"
   },
   "keywords": [
     "mcp",
@@ -30,11 +32,15 @@
     "atem-connection": "^3.8.0",
     "express": "^4.21.0",
     "jsonwebtoken": "^9.0.3",
+    "usb": "^2.19.1",
     "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0"
+  },
+  "bin": {
+    "smart-switch": "dist/app/smart-switch-app.js"
   }
 }

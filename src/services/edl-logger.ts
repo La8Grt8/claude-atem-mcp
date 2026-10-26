@@ -41,7 +41,16 @@ interface Marker { frame: number; note: string; }
 
 // ----------------------------- timecode math --------------------------------
 
+/**
+ * Video modes newer than atem-connection's VideoMode table. Each was confirmed by
+ * timing the switcher's own timecode reports against the computer clock.
+ */
+const UNLISTED_MODES: Record<number, FrameRate> = {
+  30: { base: 30, real: 30, label: '30' }, // Constellation 4K: frames 0–29, 30.000 fps over 3 min, NDF
+};
+
 export function frameRateFromVideoMode(mode: number | undefined): FrameRate {
+  if (mode !== undefined && UNLISTED_MODES[mode]) return UNLISTED_MODES[mode];
   const name = mode !== undefined ? (Enums.VideoMode as any)[mode] as string : undefined;
   const m = name?.match(/([pi])(\d{2,4})/);
   if (!m) return { base: 30, real: 30000 / 1001, label: '29.97 (assumed)' };
@@ -125,6 +134,7 @@ export class EdlLogger {
   private tcSource: TcSource = 'atem';
   private tcNote = '';
   private anchor: { frames: number; ms: number } | null = null;
+  private recentTimes: { frames: number; ms: number; lead: number }[] = [];
   private events: EdlEvent[] = [];
   private markers: Marker[] = [];
   private pending: { to: number; startFrame: number; rate: number; endedAt?: number; consumed?: boolean } | null = null;
@@ -150,7 +160,7 @@ export class EdlLogger {
     this.df = opts.dropFrame ?? (this.fr.real % 1 !== 0 && (this.fr.base === 30 || this.fr.base === 60));
     this.reelOverrides = opts.reelNames ?? {};
     this.title = opts.title?.trim() || 'ATEM Show';
-    this.events = []; this.markers = []; this.pending = null; this.anchor = null; this.endFrame = null;
+    this.events = []; this.markers = []; this.pending = null; this.anchor = null; this.recentTimes = []; this.endFrame = null;
     this.startedAt = new Date();
     this.atem = atem;
 
@@ -163,7 +173,7 @@ export class EdlLogger {
       const t0 = Date.now();
       while (!this.anchor && Date.now() - t0 < 1500) await new Promise(r => setTimeout(r, 50));
       if (this.anchor) {
-        this.timer = setInterval(() => { atem.requestTime().catch(() => undefined); }, 10000);
+        this.timer = setInterval(() => { atem.requestTime().catch(() => undefined); }, 1000);
       } else {
         atem.off('updatedTime', this.onTime);
         this.tcSource = 'clock';
@@ -242,7 +252,15 @@ export class EdlLogger {
 
   private handleTime(t: { hour: number; minute: number; second: number; frame: number; dropFrame?: boolean }): void {
     if (typeof t.dropFrame === 'boolean' && this.events.length === 0) this.df = t.dropFrame;
-    this.anchor = { frames: tcToFrames(t.hour, t.minute, t.second, t.frame, this.fr.base, this.df), ms: performance.now() };
+    // The switcher can answer several frames after the time it reports, so anchor on the
+    // least-delayed reply of the last minute (the one reading furthest ahead of our clock).
+    const ms = performance.now();
+    const frames = tcToFrames(t.hour, t.minute, t.second, t.frame, this.fr.base, this.df);
+    const lead = frames - (ms / 1000) * this.fr.real;
+    this.recentTimes = this.recentTimes.filter(r => ms - r.ms < 60000);
+    this.recentTimes.push({ frames, ms, lead });
+    const best = this.recentTimes.reduce((a, b) => (b.lead > a.lead ? b : a));
+    this.anchor = { frames: best.frames, ms: best.ms };
   }
 
   private configuredRate(ms: any): number {

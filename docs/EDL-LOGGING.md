@@ -24,6 +24,8 @@ Output: `~/Movies/ATEM EDLs/<Title>_<date>_<time>.edl` (+ `_markers.edl`, `.json
 1. **Timecode must match.** The EDL's source timecode comes from the switcher's clock
    (or the Mac clock with `tc_source: clock`). Every camera/recorder must record the
    same time-of-day timecode — jam-sync them, or set all devices and the ATEM to time of day.
+   With Tentacle Sync units, plug them into the Mac by USB and run `atem_tentacle_jam`
+   (see [TENTACLE-JAM.md](TENTACLE-JAM.md)).
 2. **Reel names.** Each event's reel = the ATEM input short name (CAM1, CAM2…), or pass
    `reel_names` e.g. `{"1":"CAM1","2":"CAM2"}`. Black = `BL`.
 3. Start the logger *after* cameras are rolling, stop it *before* they stop.

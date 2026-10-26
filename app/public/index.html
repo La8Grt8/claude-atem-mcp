@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Switch</title>
+<style>
+  :root {
+    --bg: #0d0f12; --panel: #161a1f; --panel2: #1d2228; --line: #2a3038; --text: #e8ebef; --dim: #8b949e;
+    --red: #e5484d; --amber: #f5a524; --green: #30a46c; --blue: #3e8ed0; --yellow: #f2d64b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", Helvetica, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2; }
+  h1 { font-size: 16px; margin: 0 8px 0 0; letter-spacing: .5px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); margin: 0 0 10px; }
+  main { padding: 16px; display: grid; gap: 16px; max-width: 1200px; margin: 0 auto; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  button, select, input { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
+  button { cursor: pointer; }
+  button:hover { border-color: #3b434d; }
+  button.primary { background: var(--blue); border-color: var(--blue); }
+  button:disabled { opacity: .5; cursor: default; }
+  input[type=number] { width: 80px; }
+  input[type=checkbox] { width: auto; }
+  .pill { padding: 4px 10px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); white-space: nowrap; }
+  .pill.ok { color: var(--green); border-color: var(--green); }
+  .pill.bad { color: var(--red); border-color: var(--red); }
+  .spacer { flex: 1; }
+  #auto { font-weight: 700; letter-spacing: 1px; min-width: 120px; padding: 10px 16px; font-size: 15px; }
+  #auto.on { background: var(--red); border-color: var(--red); }
+  #auto.sim { background: var(--amber); border-color: var(--amber); color: #111; }
+  #status { color: var(--dim); min-height: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  #status b { color: var(--text); font-weight: 600; }
+  .grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+  .cam { position: relative; background: var(--panel2); border: 2px solid var(--line); border-radius: 10px; padding: 12px; cursor: pointer; min-height: 92px; user-select: none; }
+  .cam .key { position: absolute; top: 8px; right: 10px; color: var(--dim); font-size: 12px; }
+  .cam .name { font-weight: 600; font-size: 15px; }
+  .cam .people { color: var(--dim); font-size: 12px; margin-top: 4px; }
+  .cam .tag { position: absolute; bottom: 8px; left: 12px; font-size: 11px; font-weight: 700; letter-spacing: 1px; }
+  .cam.onair { border-color: var(--red); box-shadow: 0 0 0 1px var(--red) inset; }
+  .cam.onair .tag { color: var(--red); }
+  .cam.next:not(.onair) { border-color: var(--yellow); border-style: dashed; }
+  .cam.next:not(.onair) .tag { color: var(--yellow); }
+  .mic { display: grid; grid-template-columns: 110px 1fr 90px; gap: 10px; align-items: center; padding: 6px 0; }
+  .mic .who { display: flex; gap: 8px; align-items: center; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #333a42; flex: none; }
+  .dot.talk { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .meter { position: relative; height: 16px; background: #0a0c0e; border-radius: 4px; overflow: hidden; border: 1px solid var(--line); }
+  .meter .fill { position: absolute; inset: 0 auto 0 0; background: #4b5563; transition: width 80ms linear; }
+  .meter .fill.voice { background: linear-gradient(90deg, var(--green), #7ee2a8); }
+  .meter .tick { position: absolute; top: 0; bottom: 0; width: 2px; }
+  .meter .thr { background: var(--yellow); }
+  .meter .flr { background: #6b7280; opacity: .7; }
+  .meter .bleed { background: var(--amber); opacity: .8; }
+  .mic .num { color: var(--dim); font-variant-numeric: tabular-nums; font-size: 12px; text-align: right; }
+  .legend { color: var(--dim); font-size: 12px; display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .tabs button.active { background: var(--blue); border-color: var(--blue); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { color: var(--dim); font-weight: 500; font-size: 12px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+  .form { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px 20px; }
+  .form label { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+  .form label span { color: var(--dim); }
+  .hint { color: var(--dim); font-size: 12px; }
+  .warn { color: var(--amber); }
+  .err { color: var(--red); }
+  .good { color: var(--green); }
+  .steps { display: grid; gap: 10px; }
+  .step { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .step .title { font-weight: 600; }
+  .result { margin-top: 8px; font-size: 13px; }
+  .people-checks label { margin-right: 10px; white-space: nowrap; }
+  #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--panel2); border: 1px solid var(--line); padding: 10px 16px; border-radius: 8px; display: none; max-width: 90vw; z-index: 5; }
+  #toast.err { border-color: var(--red); }
+  @media (max-width: 640px) { .mic { grid-template-columns: 80px 1fr; } .mic .num { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>SMART SWITCH</h1>
+  <span id="atemPill" class="pill bad">ATEM: not connected</span>
+  <span id="connectBox" class="row" style="margin:0">
+    <input id="atemHost" placeholder="ATEM IP, e.g. 192.168.1.240" size="22">
+    <button id="connectBtn">Connect</button>
+  </span>
+  <label class="hint">Profile <select id="profileSel"></select></label>
+  <label class="hint">Speed
+    <select id="speedSel">
+      <option value="very_fast">Very fast</option><option value="fast">Fast</option>
+      <option value="normal">Normal</option><option value="calm">Calm</option><option value="custom" disabled>Custom</option>
+    </select>
+  </label>
+  <span class="spacer"></span>
+  <label class="hint"><input type="checkbox" id="simulate"> Simulate</label>
+  <button id="auto" title="⌘↩ / Ctrl+Enter">AUTO OFF</button>
+</header>
+
+<main>
+  <div id="status"></div>
+
+  <section>
+    <h2>Cameras · click or press 1–9 to cut by hand</h2>
+    <div id="cams" class="grid"></div>
+  </section>
+
+  <section>
+    <h2>Mics</h2>
+    <div id="mics"></div>
+    <div class="legend">
+      <span><i style="background:var(--green)"></i>own voice</span>
+      <span><i style="background:#4b5563"></i>level (bleed/noise)</span>
+      <span><i style="background:var(--yellow)"></i>voice threshold</span>
+      <span><i style="background:var(--amber)"></i>expected bleed</span>
+      <span><i style="background:#6b7280"></i>noise floor</span>
+    </div>
+  </section>
+
+  <section>
+    <div class="tabs">
+      <button data-tab="setup" class="active">Setup</button>
+      <button data-tab="rules">Rules</button>
+      <button data-tab="calibrate">Calibrate</button>
+      <button data-tab="log">Log</button>
+    </div>
+    <div id="tab-setup"></div>
+    <div id="tab-rules" hidden></div>
+    <div id="tab-calibrate" hidden></div>
+    <div id="tab-log" hidden></div>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let S = null;          // latest state from the server
+let tab = 'setup';
+let draft = null;      // setup form being edited
+let calResults = {};   // last result per calibration step key
+
+function toast(msg, isErr) {
+  const t = $('#toast');
+  t.textContent = msg; t.className = isErr ? 'err' : ''; t.style.display = 'block';
+  clearTimeout(t._h); t._h = setTimeout(() => (t.style.display = 'none'), isErr ? 6000 : 2500);
+}
+
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error);
+  return j.result;
+}
+const act = (fn) => async (...a) => { try { return await fn(...a); } catch (e) { toast(e.message, true); } };
+
+// --------------------------------------------------------------- live state
+function connectEvents() {
+  const es = new EventSource('/api/events');
+  es.onmessage = (e) => { S = JSON.parse(e.data); renderLive(); };
+  es.onerror = () => { $('#atemPill').textContent = 'App not reachable'; $('#atemPill').className = 'pill bad'; };
+}
+
+function cameras() { return S?.profile?.cameras ?? []; }
+
+function renderLive() {
+  const a = S.atem, sm = S.smart;
+  const pill = $('#atemPill');
+  pill.textContent = a.connected ? `ATEM: ${a.model} · ${a.host}` : (a.connecting ? `ATEM: connecting to ${a.host}…` : `ATEM: not connected${a.error ? ' — ' + a.error : ''}`);
+  pill.className = 'pill ' + (a.connected ? 'ok' : 'bad');
+  $('#connectBox').style.display = a.connected ? 'none' : '';
+  if (document.activeElement !== $('#atemHost') && !$('#atemHost').value && a.host) $('#atemHost').value = a.host;
+
+  const ps = $('#profileSel');
+  const opts = S.profiles.map(n => `<option ${n === S.profile.profile ? 'selected' : ''}>${esc(n)}</option>`).join('') + '<option value="__new">+ New profile…</option>';
+  if (ps._opts !== opts && document.activeElement !== ps) { ps.innerHTML = opts; ps._opts = opts; }
+  if (document.activeElement !== $('#speedSel')) $('#speedSel').value = S.profile.speed;
+
+  const auto = $('#auto');
+  auto.textContent = sm.switching ? (sm.simulate ? 'SIMULATING' : 'AUTO ON') : 'AUTO OFF';
+  auto.className = sm.switching ? (sm.simulate ? 'sim' : 'on') : '';
+  $('#simulate').disabled = sm.switching;
+
+  const d = sm.decision;
+  let st = '';
+  if (sm.profile && S.profile.problems.length) st += `<span class="warn">⚠ ${esc(S.profile.problems.join(' '))}</span>`;
+  else if (!sm.switching) st += '<span>AUTO is off: the app doesn\'t cut by itself.</span>';
+  if (d) st += `<span><b>${esc(d.reason)}</b>${d.holding ? ' · ' + esc(d.holding) : ''}</span>`;
+  if (sm.manualPauseRemainingS > 0) st += `<button id="resumeBtn">Resume auto (${sm.manualPauseRemainingS}s)</button>`;
+  if (sm.meters.device?.error) st += `<span class="err">Mixer: ${esc(sm.meters.device.error)}</span>`;
+  $('#status').innerHTML = st;
+  $('#resumeBtn')?.addEventListener('click', act(() => api('/api/resume', {})));
+
+  const program = sm.switching && sm.simulate ? sm.programInput : a.program;
+  $('#cams').innerHTML = cameras().map((c, i) => {
+    const onair = program === c.input;
+    const next = d && d.target === c.input;
+    const secs = sm.onAirSeconds?.[`${c.name} (${c.input})`];
+    return `<div class="cam ${onair ? 'onair' : ''} ${next ? 'next' : ''}" data-input="${c.input}">
+      ${i < 9 ? `<span class="key">${i + 1}</span>` : ''}
+      <div class="name">${esc(c.name)} <span class="hint">· in ${c.input}</span></div>
+      <div class="people">${esc(c.people.join(', ') || 'nobody')}${secs ? ` · ${fmtDur(secs)}` : ''}</div>
+      <div class="tag">${onair ? (sm.simulate && sm.switching ? 'ON AIR (SIM)' : 'ON AIR') : next ? 'NEXT' : ''}</div>
+    </div>`;
+  }).join('') || '<div class="hint">No cameras yet — add them in Setup.</div>';
+
+  const pct = (db) => Math.max(0, Math.min(100, (db + 80) / 80 * 100));
+  $('#mics').innerHTML = sm.mics.map(m => `
+    <div class="mic">
+      <div class="who"><span class="dot ${m.talking ? 'talk' : ''}"></span>${esc(m.name)}</div>
+      <div class="meter">
+        <div class="fill ${m.ownVoice ? 'voice' : ''}" style="width:${pct(m.level)}%"></div>
+        <div class="tick flr" style="left:${pct(m.floor)}%"></div>
+        ${m.expectedBleed !== null ? `<div class="tick bleed" style="left:${pct(m.expectedBleed)}%"></div>` : ''}
+        <div class="tick thr" style="left:${pct(m.threshold)}%"></div>
+      </div>
+      <div class="num">${m.level <= -99 ? '—' : m.level.toFixed(0) + ' dB'}</div>
+    </div>`).join('') || '<div class="hint">No mics yet — add them in Setup.</div>';
+
+  if (tab === 'log') renderLog();
+  if (tab === 'calibrate') renderCalMatrix();
+}
+
+function fmtDur(s) { return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`; }
+
+// --------------------------------------------------------------- header
+$('#connectBtn').onclick = act(async () => { await api('/api/connect', { host: $('#atemHost').value }); toast('Connected'); });
+$('#auto').onclick = act(toggleAuto);
+async function toggleAuto() {
+  const msg = await api('/api/switch', { on: !S.smart.switching, simulate: $('#simulate').checked });
+  toast(String(msg).split('\n')[0]);
+}
+$('#speedSel').onchange = act(async (e) => { await api('/api/setup', { speed: e.target.value }); toast('Speed saved'); draft = null; renderTab(); });
+$('#profileSel').onchange = act(async (e) => {
+  let name = e.target.value;
+  if (name === '__new') {
+    name = prompt('Name for the new profile:');
+    if (!name) { e.target._opts = ''; return; }
+    const copy = confirm(`Copy the current profile "${S.profile.profile}"?\nOK = copy, Cancel = start empty`);
+    await api('/api/profile', { action: 'create', name, copy_from: copy ? S.profile.profile : undefined });
+  }
+  await api('/api/profile', { action: 'use', name });
+  e.target._opts = ''; draft = null; calResults = {};
+  toast(`Profile: ${name}`); setTimeout(renderTab, 200);
+});
+
+$('#cams').addEventListener('click', act(async (e) => {
+  const el = e.target.closest('.cam'); if (!el) return;
+  await api('/api/cut', { input: Number(el.dataset.input) });
+}));
+
+document.addEventListener('keydown', (e) => {
+  const typing = ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName);
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); act(toggleAuto)(); return; }
+  if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+  const n = Number(e.key);
+  if (n >= 1 && n <= 9 && cameras()[n - 1]) act(() => api('/api/cut', { input: cameras()[n - 1].input }))();
+});
+
+// --------------------------------------------------------------- tabs
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  tab = b.dataset.tab;
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('active', x === b));
+  for (const t of ['setup', 'rules', 'calibrate', 'log']) $('#tab-' + t).hidden = t !== tab;
+  renderTab();
+});
+function renderTab() {
+  if (!S) return;
+  if (tab === 'setup') renderSetup();
+  if (tab === 'rules') renderRules();
+  if (tab === 'calibrate') renderCalibrate();
+  if (tab === 'log') renderLog();
+}
+
+// --------------------------------------------------------------- setup
+function freshDraft() {
+  const p = S.profile;
+  return {
+    audio_device: p.audioDevice ?? '',
+    mics: p.mics.map(m => ({ name: m.name, kind: m.source.kind, n: m.source.kind === 'atem' ? m.source.input : m.source.channel, enabled: m.enabled })),
+    cameras: p.cameras.map(c => ({ input: c.input, name: c.name, people: [...c.people] })),
+  };
+}
+
+async function renderSetup() {
+  draft ??= freshDraft();
+  const el = $('#tab-setup');
+  const inputs = (S.atem.inputs ?? []).filter(i => i.external);
+  const devOptions = (window._devices ?? []).map(d => `<option value="${d.index}" ${String(d.index) === String(draft.audio_device) || d.name === draft.audio_device ? 'selected' : ''}>${esc(d.index + ': ' + d.name)}</option>`).join('');
+  const names = draft.mics.map(m => m.name).filter(Boolean);
+  el.innerHTML = `
+    <h2>Audio</h2>
+    <div class="row">
+      <label>USB mixer <select id="dev"><option value="">— none (ATEM inputs only) —</option>${devOptions}</select></label>
+      <button id="devRefresh">Find mixers</button>
+      <span class="hint">Mics can come from a USB mixer channel or from an ATEM audio input.</span>
+    </div>
+    <h2 style="margin-top:16px">Mics — one per person</h2>
+    <table><thead><tr><th>Name</th><th>Source</th><th>Channel / input</th><th>On</th><th></th></tr></thead><tbody>
+    ${draft.mics.map((m, i) => `<tr>
+      <td><input data-mic="${i}" data-f="name" value="${esc(m.name)}" placeholder="Name" maxlength="20"></td>
+      <td><select data-mic="${i}" data-f="kind"><option value="device" ${m.kind === 'device' ? 'selected' : ''}>USB mixer channel</option><option value="atem" ${m.kind === 'atem' ? 'selected' : ''}>ATEM audio input</option></select></td>
+      <td><input type="number" min="1" data-mic="${i}" data-f="n" value="${m.n}"></td>
+      <td><input type="checkbox" data-mic="${i}" data-f="enabled" ${m.enabled ? 'checked' : ''}></td>
+      <td><button data-delmic="${i}">Remove</button></td></tr>`).join('')}
+    </tbody></table>
+    <div class="row"><button id="addMic">+ Add mic</button></div>
+    <h2 style="margin-top:16px">Cameras — tick who is visible in each shot (everyone on the wide)</h2>
+    <table><thead><tr><th>ATEM input</th><th>Name</th><th>People in shot</th><th></th></tr></thead><tbody>
+    ${draft.cameras.map((c, i) => `<tr>
+      <td>${inputs.length
+        ? `<select data-cam="${i}" data-f="input">${inputs.map(x => `<option value="${x.input}" ${x.input === c.input ? 'selected' : ''}>${x.input}: ${esc(x.long || x.short)}</option>`).join('')}</select>`
+        : `<input type="number" min="1" data-cam="${i}" data-f="input" value="${c.input}">`}</td>
+      <td><input data-cam="${i}" data-f="name" value="${esc(c.name)}" placeholder="(ATEM name)"></td>
+      <td class="people-checks">${names.map(n => `<label><input type="checkbox" data-cam="${i}" data-person="${esc(n)}" ${c.people.includes(n) ? 'checked' : ''}> ${esc(n)}</label>`).join('') || '<span class="hint">add mics first</span>'}</td>
+      <td><button data-delcam="${i}">Remove</button></td></tr>`).join('')}
+    </tbody></table>
+    <div class="row"><button id="addCam">+ Add camera</button></div>
+    <div class="row" style="margin-top:14px"><button class="primary" id="saveSetup">Save setup</button><button id="revertSetup">Revert</button>
+      <span class="hint">Saved to ${esc(S.configPath)}</span></div>`;
+
+  el.querySelectorAll('[data-mic]').forEach(inp => inp.onchange = () => {
+    const m = draft.mics[inp.dataset.mic], f = inp.dataset.f;
+    const old = m.name;
+    m[f] = f === 'enabled' ? inp.checked : f === 'n' ? Number(inp.value) : inp.value;
+    if (f === 'name') draft.cameras.forEach(c => { c.people = c.people.map(p => p === old ? m.name : p); });
+    if (f === 'name' || f === 'kind') renderSetup();
+  });
+  el.querySelectorAll('[data-cam]').forEach(inp => inp.onchange = () => {
+    const c = draft.cameras[inp.dataset.cam];
+    if (inp.dataset.person) {
+      const p = inp.dataset.person;
+      c.people = inp.checked ? [...new Set([...c.people, p])] : c.people.filter(x => x !== p);
+    } else c[inp.dataset.f] = inp.dataset.f === 'input' ? Number(inp.value) : inp.value;
+  });
+  el.querySelectorAll('[data-delmic]').forEach(b => b.onclick = () => {
+    const [m] = draft.mics.splice(Number(b.dataset.delmic), 1);
+    draft.cameras.forEach(c => { c.people = c.people.filter(p => p !== m.name); });
+    renderSetup();
+  });
+  el.querySelectorAll('[data-delcam]').forEach(b => b.onclick = () => { draft.cameras.splice(Number(b.dataset.delcam), 1); renderSetup(); });
+  $('#dev').onchange = (e) => { draft.audio_device = e.target.value; };
+  $('#addMic').onclick = () => {
+    const n = draft.mics.length + 1;
+    draft.mics.push({ name: `Mic ${n}`, kind: draft.mics[0]?.kind ?? (draft.audio_device ? 'device' : 'atem'), n, enabled: true });
+    renderSetup();
+  };
+  $('#addCam').onclick = () => {
+    const used = new Set(draft.cameras.map(c => c.input));
+    const free = inputs.find(x => !used.has(x.input))?.input ?? (Math.max(0, ...used) + 1);
+    draft.cameras.push({ input: free, name: '', people: [] });
+    renderSetup();
+  };
+  $('#devRefresh').onclick = act(loadDevices);
+  $('#revertSetup').onclick = () => { draft = null; renderSetup(); };
+  $('#saveSetup').onclick = act(async () => {
+    const res = await api('/api/setup', {
+      audio_device: draft.audio_device === '' ? null : draft.audio_device,
+      mics: draft.mics.map(m => ({ name: m.name.trim(), enabled: m.enabled, ...(m.kind === 'atem' ? { atem_input: m.n } : { channel: m.n }) })),
+      cameras: draft.cameras.map(c => ({ input: c.input, name: c.name || undefined, people: c.people })),
+    });
+    await api('/api/meters', {}).catch(e => toast(e.message, true));
+    toast(res.problems.length ? 'Saved — ' + res.problems.join(' ') : 'Setup saved', res.problems.length > 0);
+    setTimeout(() => { draft = null; renderSetup(); }, 300);
+  });
+  if (!window._devices) loadDevices().catch(() => undefined);
+}
+
+async function loadDevices() {
+  const r = await api('/api/devices');
+  window._devices = r.devices;
+  if (tab === 'setup') renderSetup();
+}
+
+// --------------------------------------------------------------- rules
+const RULES = [
+  ['Shots', [
+    ['minShotMs', 'min_shot_ms', 'Minimum time per shot', 'ms'],
+    ['switchDelayMs', 'switch_delay_ms', 'Confirm the new shot', 'ms'],
+    ['attackMs', 'attack_ms', 'Voice start', 'ms'],
+    ['releaseMs', 'release_ms', 'Voice end', 'ms'],
+  ]],
+  ['Several people at once', [
+    ['groupCount', 'group_count', 'From how many people', ''],
+    ['groupConfirmMs', 'group_confirm_ms', 'Talking together for at least', 'ms'],
+    ['groupShot', 'group_shot', 'Go to', [['wide', 'The wide shot'], ['tightest', 'Tightest shot showing them all']]],
+  ]],
+  ['When nobody talks', [
+    ['silenceAction', 'silence_action', 'What to do', [['stay', 'Stay'], ['wide', 'Go to the wide'], ['camera', 'Go to a chosen camera']]],
+    ['silenceCamera', 'silence_camera', 'Chosen camera', 'camera'],
+    ['silenceMs', 'silence_ms', 'After', 'ms'],
+  ]],
+  ['Variety', [
+    ['varietyMs', 'variety_ms', 'Cut away after someone talks for (0 = off)', 'ms'],
+    ['varietyHoldMs', 'variety_hold_ms', 'Cutaway length', 'ms'],
+  ]],
+  ['Manual control & output', [
+    ['manualHoldMs', 'manual_hold_ms', 'Pause after a manual cut', 'ms'],
+    ['respectOtherSources', 'respect_other_sources', 'Don\'t cut over logos/black/media', 'bool'],
+    ['transition', 'transition', 'Cut type', [['cut', 'Straight cut'], ['auto', 'ATEM transition']]],
+    ['me', 'me', 'M/E bus (0 = M/E 1)', ''],
+  ]],
+  ['Voice detection', [
+    ['autoMarginDb', 'auto_margin_db', 'Voice above noise floor', 'dB'],
+    ['bleedMarginDb', 'bleed_margin_db', 'Margin over expected bleed', 'dB'],
+    ['weakMicRejectDb', 'weak_mic_reject_db', 'Ignore mics this far below the loudest (until bleed is learned; empty = off)', 'dBnull'],
+    ['adaptive', 'adaptive', 'Keep learning during the show', 'bool'],
+  ]],
+];
+
+function renderRules() {
+  const r = S.profile.rules;
+  const cams = cameras();
+  $('#tab-rules').innerHTML = RULES.map(([title, fields]) => `
+    <h2 style="margin-top:12px">${title}</h2>
+    <div class="form">${fields.map(([k, api, label, kind]) => {
+      let ctl;
+      if (Array.isArray(kind)) ctl = `<select data-rule="${api}">${kind.map(([v, t]) => `<option value="${v}" ${r[k] === v ? 'selected' : ''}>${t}</option>`).join('')}</select>`;
+      else if (kind === 'bool') ctl = `<input type="checkbox" data-rule="${api}" ${r[k] ? 'checked' : ''}>`;
+      else if (kind === 'camera') ctl = `<select data-rule="${api}"><option value="">—</option>${cams.map(c => `<option value="${c.input}" ${r[k] === c.input ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>`;
+      else ctl = `<input type="number" data-rule="${api}" data-kind="${kind}" value="${r[k] ?? ''}"> <span>${kind === 'dBnull' ? 'dB' : kind}</span>`;
+      return `<label><span>${label}</span><span>${ctl}</span></label>`;
+    }).join('')}</div>`).join('') +
+    `<div class="row" style="margin-top:14px"><button class="primary" id="saveRules">Save rules</button>
+     <span class="hint">Changing a shot timing sets Speed to Custom. Pick a speed in the header to reset all four.</span></div>`;
+  $('#saveRules').onclick = act(async () => {
+    const rules = {};
+    document.querySelectorAll('[data-rule]').forEach(el => {
+      const k = el.dataset.rule;
+      if (el.type === 'checkbox') rules[k] = el.checked;
+      else if (el.tagName === 'SELECT') rules[k] = k === 'silence_camera' ? (el.value === '' ? null : Number(el.value)) : el.value;
+      else if (el.dataset.kind === 'dBnull') rules[k] = el.value === '' ? null : Number(el.value);
+      else rules[k] = Number(el.value);
+    });
+    const res = await api('/api/setup', { rules });
+    toast(res.problems.length ? 'Saved — ' + res.problems.join(' ') : 'Rules saved', res.problems.length > 0);
+  });
+}
+
+// --------------------------------------------------------------- calibrate
+function renderCalibrate() {
+  const mics = S.profile.mics.filter(m => m.enabled);
+  const res = (key) => {
+    const r = calResults[key]; if (!r) return '';
+    if (r.running) return `<div class="result hint">Recording… ${esc(r.running)}</div>`;
+    if (r.error) return `<div class="result err">${esc(r.error)}</div>`;
+    const ok = r.ok !== false;
+    let body = `<span class="${ok ? 'good' : 'warn'}">${ok ? '● GOOD' : '● CHECK'}</span>`;
+    if (r.noiseFloorDb) body += ' · noise: ' + Object.entries(r.noiseFloorDb).map(([n, v]) => `${esc(n)} ${v} dB`).join(', ');
+    if (r.bleedIntoOthersDb) body += ` · voice ${r.speechDb ?? '—'} dB · bleed: ` + Object.entries(r.bleedIntoOthersDb).map(([n, v]) => `${esc(n)} ${v} dB`).join(', ');
+    if (r.detectedShare) body += ' · detected: ' + Object.entries(r.detectedShare).map(([n, v]) => `${esc(n)} ${v}`).join(', ') + ` · right shot ${r.correctShotShare}`;
+    if (r.suggestedMic) body += `<div class="warn">Didn't hear them on their mic, but ${esc(r.suggestedMic)}'s mic sounded — check the channel mapping.</div>`;
+    for (const w of r.warnings ?? []) body += `<div class="warn">${esc(w)}</div>`;
+    return `<div class="result">${body}</div>`;
+  };
+  const busy = Object.values(calResults).some(r => r.running);
+  $('#tab-calibrate').innerHTML = `
+    <p class="hint">Calibration teaches the app each mic's background noise and how much each person's voice leaks into the other mics. Do it with everyone in their seat, mics where they'll be during the show.</p>
+    <div class="steps">
+      <div class="step"><div class="title">1 · Quiet, please</div>
+        <div class="hint">Nobody talks for 8 seconds.</div>
+        <div class="row"><button data-cal="noise" ${busy ? 'disabled' : ''}>Record silence</button></div>${res('noise')}</div>
+      <div class="step"><div class="title">2 · Each person alone</div>
+        <div class="hint">Only that person talks for 10 seconds, in their normal voice (introduce yourself, chat). Everyone else silent.</div>
+        <div class="row"><label class="hint"><input type="checkbox" id="putOnAir"> Put their camera on air while learning</label></div>
+        ${mics.map(m => `<div class="row"><button data-cal="speaker" data-mic="${esc(m.name)}" ${busy ? 'disabled' : ''}>Only ${esc(m.name)} talks</button></div>${res('speaker:' + m.name)}`).join('')}
+      </div>
+      <div class="step"><div class="title">3 · Everyone at once</div>
+        <div class="hint">Everyone talks at the same time for 10 seconds, like an argument — normal voices, no taking turns.</div>
+        <div class="row"><button data-cal="together" ${busy ? 'disabled' : ''}>Everyone talk now</button></div>${res('together')}</div>
+      <div class="step"><div class="title">Bleed between mics</div>
+        <div class="hint">How loud each person (row) sounds in the other mics (columns), relative to their own mic. More negative = better separated. Amber: the two mics hear almost the same.</div>
+        <div id="calMatrix"></div></div>
+    </div>`;
+  renderCalMatrix();
+  $('#tab-calibrate').querySelectorAll('[data-cal]').forEach(b => b.onclick = async () => {
+    const step = b.dataset.cal, mic = b.dataset.mic;
+    const key = step === 'speaker' ? 'speaker:' + mic : step;
+    calResults[key] = { running: step === 'noise' ? '8 s — stay quiet' : step === 'together' ? '10 s — everyone talk' : `10 s — only ${mic}` };
+    renderCalibrate();
+    try {
+      calResults[key] = await api('/api/calibrate', { step, mic, put_on_air: $('#putOnAir')?.checked ?? false });
+    } catch (e) { calResults[key] = { error: e.message }; }
+    renderCalibrate();
+  });
+}
+
+function renderCalMatrix() {
+  const el = $('#calMatrix'); if (!el || !S.calibration) return;
+  const m = S.calibration.bleedDb, people = Object.keys(m);
+  const html = people.length < 2 ? '<span class="hint">Needs at least two mics.</span>' : `<table><thead><tr><th>voice ↓ / mic →</th>${people.map(p => `<th>${esc(p)}</th>`).join('')}</tr></thead><tbody>
+    ${people.map(s => `<tr><th>${esc(s)}</th>${people.map(d => {
+      if (s === d) return '<td class="hint">—</td>';
+      const v = m[s][d];
+      return `<td class="${v === null ? 'hint' : v > -6 ? 'warn' : ''}">${v === null ? 'not learned' : v + ' dB'}</td>`;
+    }).join('')}</tr>`).join('')}</tbody></table>`;
+  if (el._html !== html) { el.innerHTML = html; el._html = html; }
+}
+
+// --------------------------------------------------------------- log
+function renderLog() {
+  const sm = S.smart;
+  const html = `
+    <div class="row"><a href="/api/cuts.csv"><button>Download cut log (CSV)</button></a>
+      <span class="hint">${sm.switching ? `Running ${fmtDur(sm.runningForSeconds)}` : 'Not running'}</span></div>
+    <h2 style="margin-top:12px">Time on air</h2>
+    <div class="hint">${Object.entries(sm.onAirSeconds ?? {}).map(([n, s]) => `${esc(n)}: ${fmtDur(s)}`).join(' · ') || '—'}</div>
+    <h2 style="margin-top:12px">Recent cuts</h2>
+    <table><thead><tr><th>Time</th><th>To</th><th>By</th><th>Why</th></tr></thead><tbody>
+    ${[...sm.recentCuts].reverse().map(c => `<tr><td>${new Date(c.at).toLocaleTimeString()}</td><td>${esc(c.name)}</td><td>${esc(c.source)}</td><td>${esc(c.reason)}</td></tr>`).join('') || '<tr><td colspan="4" class="hint">No cuts yet</td></tr>'}
+    </tbody></table>`;
+  const el = $('#tab-log');
+  if (el._html !== html) { el.innerHTML = html; el._html = html; }
+}
+
+// --------------------------------------------------------------- boot
+(async () => {
+  try { S = await api('/api/state'); renderLive(); renderTab(); } catch (e) { toast(e.message, true); }
+  connectEvents();
+})();
+</script>
+</body>
+</html>
